@@ -1,4 +1,3 @@
-"""/tasks endpoints — user tasks integrated with focus timer."""
 from typing import Optional
 
 from fastapi import APIRouter, Query, status

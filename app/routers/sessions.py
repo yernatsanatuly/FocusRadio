@@ -1,4 +1,3 @@
-"""/sessions endpoints — focus timers."""
 from typing import Optional
 
 from fastapi import APIRouter, Query, status

@@ -1,4 +1,3 @@
-"""Leaderboard schemas."""
 from pydantic import BaseModel
 
 from app.models.enums import LeaderboardMetric
@@ -11,7 +10,6 @@ class LeaderboardEntry(BaseModel):
     display_name: str
     level: int
     value: int
-
 
 class Leaderboard(BaseModel):
     metric: LeaderboardMetric

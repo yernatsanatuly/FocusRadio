@@ -1,4 +1,3 @@
-"""/rooms endpoints — virtual coworking rooms."""
 from typing import Optional
 
 from fastapi import APIRouter, Query, status
@@ -61,7 +60,6 @@ def delete_room(room_id: int, acting_user_id: ActingUserId, service: Rooms):
     service.delete(room_id, acting_user_id)
 
 
-# ------------------------------------------------------------------ members
 @router.get("/{room_id}/members", response_model=RoomActivity, responses=error_responses(404),
             summary="Members and their live focus status")
 def room_members(room_id: int, service: Rooms):
@@ -82,7 +80,6 @@ def leave_room(room_id: int, user_id: int, acting_user_id: ActingUserId, service
     return service.remove_member(room_id, user_id, acting_user_id)
 
 
-# ------------------------------------------------------------------ audio
 @router.put("/{room_id}/track", response_model=RoomResponse,
             responses=error_responses(403, 404, 409, 422),
             summary="Set the room's now-playing track (members only)")
