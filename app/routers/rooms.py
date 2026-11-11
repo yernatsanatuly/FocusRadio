@@ -1,4 +1,3 @@
-"""/rooms endpoints — virtual coworking rooms."""
 from typing import Optional
 
 from fastapi import APIRouter, Query, status

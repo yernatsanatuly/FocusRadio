@@ -1,9 +1,7 @@
-"""Domain enumerations shared by entities, schemas and services."""
 from enum import Enum
 
 
 class SessionMode(str, Enum):
-    """Timer presets. `custom` requires explicit durations."""
 
     POMODORO = "pomodoro"      # 25 / 5
     SHORT = "short"            # 15 / 3

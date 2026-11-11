@@ -1,4 +1,3 @@
-"""Personal task (to-do) schemas."""
 from datetime import datetime
 from typing import Optional
 

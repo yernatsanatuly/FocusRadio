@@ -1,4 +1,3 @@
-"""FocusRadio FastAPI application."""
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -21,26 +20,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title=settings.app_name,
     version=settings.version,
-    description="""
-# 🎧 FocusRadio — Совместные комнаты для работы и учёбы (Coworking Space)
-
-Интерактивный REST API виртуального коворкинга для совместной продуктивной работы.
-
-### Ключевые возможности:
-- **Coworking Rooms**: публичные и приватные комнаты с контролем вместимости, владельцем и общим аудио-стримом.
-- **Focus Sessions (Pomodoro & Custom)**: таймеры с машиной состояний (active/paused/completed/ended_early/cancelled), защитой от перерывов и синхронизацией со статусом в комнате.
-- **Adaptive Audio**: рекомендация треков под текущую фазу комнаты (фокус vs отдых) с учетом жанров и уровня энергии.
-- **Personal Tasks**: трекинг задач с прогрессом по помидоркам и связкой с активными сессиями.
-- **Gamification**: опыт (XP), система уровней, стрики дней, автоматические ачивки и глобальные/комнатные лидерборды.
-
-Документация интерактивна: используйте кнопку **Authorize** или заголовок `X-User-Id` для действий от имени пользователя.
-    """,
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
 )
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -49,10 +33,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Exception handlers
+
 register_exception_handlers(app)
 
-# Include routers
 app.include_router(users.router)
 app.include_router(rooms.router)
 app.include_router(sessions.router)
