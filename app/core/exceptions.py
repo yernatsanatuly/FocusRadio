@@ -1,15 +1,3 @@
-"""Domain exceptions and their JSON error handlers.
-
-Every error returned by the API has the same shape:
-
-    {
-      "error": {
-        "code": "ROOM_FULL",
-        "message": "Room 'Deep Work' is full (5/5)",
-        "details": {...}
-      }
-    }
-"""
 from typing import Any, Optional
 
 from fastapi import FastAPI, Request, status

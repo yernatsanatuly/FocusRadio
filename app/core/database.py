@@ -56,7 +56,6 @@ _DEMO_TRACKS = [
 
 
 def seed_demo_data(database: Database) -> None:
-    """Populate the store with a few tracks, users and a public room."""
     for title, artist, genre, mood, energy, duration, bpm in _DEMO_TRACKS:
         tid = database.next_id("tracks")
         database.tracks[tid] = Track(

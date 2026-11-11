@@ -1,22 +1,21 @@
-"""Domain enumerations shared by entities, schemas and services."""
+
 from enum import Enum
 
 
 class SessionMode(str, Enum):
-    """Timer presets. `custom` requires explicit durations."""
 
-    POMODORO = "pomodoro"      # 25 / 5
-    SHORT = "short"            # 15 / 3
-    DEEP_WORK = "deep_work"    # 50 / 10
+    POMODORO = "pomodoro"
+    SHORT = "short"
+    DEEP_WORK = "deep_work"
     CUSTOM = "custom"
 
 
 class SessionStatus(str, Enum):
     ACTIVE = "active"
     PAUSED = "paused"
-    COMPLETED = "completed"        # full planned focus time reached
-    ENDED_EARLY = "ended_early"    # user forced finish before planned time (partial XP)
-    CANCELLED = "cancelled"        # abandoned, no XP
+    COMPLETED = "completed"
+    ENDED_EARLY = "ended_early"
+    CANCELLED = "cancelled"
 
 
 class Genre(str, Enum):
@@ -29,8 +28,6 @@ class Genre(str, Enum):
 
 
 class Mood(str, Enum):
-    """What kind of activity a track fits best (used for adaptive audio)."""
-
     FOCUS = "focus"
     BREAK = "break"
     ENERGIZE = "energize"

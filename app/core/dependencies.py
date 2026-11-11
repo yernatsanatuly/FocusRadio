@@ -1,4 +1,3 @@
-"""Reusable FastAPI dependencies / annotated parameter types."""
 from typing import Annotated
 
 from fastapi import Depends, Header, Query
@@ -10,7 +9,6 @@ from app.services.task_service import TaskService
 from app.services.track_service import TrackService
 from app.services.user_service import UserService
 
-# Simplified authentication: the caller identifies itself with the X-User-Id header.
 ActingUserId = Annotated[
     int,
     Header(

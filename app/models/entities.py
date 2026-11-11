@@ -1,8 +1,3 @@
-"""Internal domain entities stored in the in-memory database.
-
-These are plain dataclasses (not Pydantic models) so the storage layer is
-independent from the API schemas.
-"""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -65,7 +60,7 @@ class Track:
     artist: str
     genre: Genre
     mood: Mood
-    energy: int            # 1 (very calm) .. 10 (very energetic)
+    energy: int
     duration_seconds: int
     bpm: Optional[int] = None
     created_at: datetime = field(default_factory=utcnow)
