@@ -1,26 +1,26 @@
-# 🎧 FocusRadio — Совместные комнаты для работы и учёбы (Coworking Space)
+# 🎧 FocusRadio — Shared Rooms for Work and Study (Coworking Space)
 
-**FocusRadio** — интерактивный REST API виртуального коворкинга. Помогает студентам, разработчикам и фрилансерам бороться с прокрастинацией и удерживать фокус с помощью совместных комнат, умных таймеров (Pomodoro / Custom), адаптивного аудио-фона и геймификации (XP, уровни, стрики, ачивки, лидерборды).
+**FocusRadio** is an interactive REST API for a virtual coworking space. It helps students, developers, and freelancers stay focused, work together in real time, and increase productivity through a gamified environment with adaptive audio and structured sessions.
 
 ---
 
-## 🏛 Архитектура проекта
+## 🏛 Project Architecture
 
-Проект строго разделен на слои в соответствии с принципами чистой архитектуры:
+The project is strictly divided into layers in accordance with the principles of clean architecture:
 
 ```text
 focusradio/
 ├── app/
-│   ├── config.py                 # Настройки приложения (env vars, таймер, множители XP)
-│   ├── main.py                   # Точка входа FastAPI, CORS, middleware, Swagger
+│   ├── config.py                 # Application settings (environment variables, timer, XP multipliers)
+│   ├── main.py                   # FastAPI entry point, CORS, middleware, Swagger
 │   ├── core/
-│   │   ├── database.py           # In-memory хранилище данных (dict + счетчики ID) + Seed
-│   │   ├── dependencies.py       # FastAPI Depends: внедрение сервисов, пагинация, X-User-Id
-│   │   └── exceptions.py         # Доменные исключения (400, 403, 404, 409, 422) и хендлеры
+│   │   ├── database.py           # In-memory data storage (dict + ID counters) + seed data
+│   │   ├── dependencies.py       # FastAPI Depends: service injection, pagination, X-User-Id
+│   │   └── exceptions.py         # Domain exceptions (400, 403, 404, 409, 422) and handlers
 │   ├── models/
-│   │   ├── enums.py              # Перечисления: Genre, Mood, SessionMode, SessionStatus и др.
-│   │   └── entities.py           # Внутренние структуры сущностей (Dataclasses)
-│   ├── schemas/                  # Pydantic-модели валидации запросов и ответов
+│   │   ├── enums.py              # Enumerations: Genre, Mood, SessionMode, SessionStatus, etc.
+│   │   └── entities.py           # Internal entity structures (dataclasses)
+│   ├── schemas/                  # Pydantic models for request/response validation
 │   │   ├── common.py             # Page[T], ErrorResponse
 │   │   ├── users.py              # UserCreate, UserUpdate, UserResponse, UserStats
 │   │   ├── rooms.py              # RoomCreate, RoomUpdate, RoomActivity, RoomResponse
@@ -28,15 +28,15 @@ focusradio/
 │   │   ├── tasks.py              # TaskCreate, TaskUpdate, TaskResponse
 │   │   ├── tracks.py             # TrackCreate, TrackUpdate, TrackResponse
 │   │   └── leaderboard.py        # Leaderboard, LeaderboardEntry
-│   ├── services/                 # Бизнес-логика приложения (чистый Python, вне роутеров)
-│   │   ├── common.py             # Общие хелперы поиска и проверки прав владения
-│   │   ├── user_service.py       # Управление пользователями, каскадное удаление данных
-│   │   ├── room_service.py       # Жизненный цикл комнат, смена владельца, адаптивное аудио
-│   │   ├── session_service.py    # Машина состояний таймеров фокуса, расчет времени
-│   │   ├── task_service.py       # Задачи, лимиты, привязка к сессиям, автонаграды
-│   │   ├── track_service.py      # Каталог аудиотреков с фильтрами по настроению и энергии
-│   │   └── gamification.py       # Расчет XP, формула уровней, стрики, система ачивок
-│   └── routers/                  # Контроллеры FastAPI (декораторы HTTP-методов)
+│   ├── services/                 # Business logic layer (pure Python, outside the routers)
+│   │   ├── common.py             # Shared helpers for lookup and ownership checks
+│   │   ├── user_service.py       # User management and cascading data deletion
+│   │   ├── room_service.py       # Room lifecycle, owner changes, adaptive audio
+│   │   ├── session_service.py    # Focus timer state machine and time calculations
+│   │   ├── task_service.py       # Task logic, limits, session binding, automatic rewards
+│   │   ├── track_service.py      # Audio catalog with filters by mood and energy
+│   │   └── gamification.py       # XP calculations, level formula, streaks, achievement system
+│   └── routers/                  # FastAPI controllers (HTTP method handlers)
 │       ├── users.py              # /users/*
 │       ├── rooms.py              # /rooms/*
 │       ├── sessions.py           # /sessions/*
@@ -44,67 +44,68 @@ focusradio/
 │       ├── tracks.py             # /tracks/*
 │       └── leaderboard.py        # /leaderboard
 ├── tests/
-│   └── test_api.py               # E2E тесты всех сценариев и валидации
-├── requirements.txt              # Зависимости проекта
+│   └── test_api.py               # End-to-end tests for all workflows and validation
+├── requirements.txt              # Project dependencies
 └── README.md
 ```
 
 ---
 
-## 🚀 3 Ключевых сценария (Business Workflows)
+## 🚀 3 Key Business Workflows
 
-### 1. Виртуальный коворкинг и Адаптивное Аудио (Coworking & Adaptive Audio)
-- Пользователь создает публичную или приватную комнату с лимитом участников (например, от 2 до 50 мест). Для приватной комнаты обязателен пароль (`access_code`).
-- Пользователи присоединяются к комнате (`POST /rooms/{id}/members`). При выходе последнего участника комната удаляется автоматически. При выходе создателя комната автоматически передает права владения (`owner_id`) следующему по старшинству участнику.
-- **Синхронизация статуса**: в реальном времени эндпоинт `GET /rooms/{id}/members` показывает текущую активность всех участников (`focusing`, `paused`, `idle`).
-- **Адаптивное аудио**: алгоритм анализирует соотношение участников в фокусе и на перерыве:
-  - Если $\ge 50\%$ участников работают $\to$ фаза **`focus`**: рекомендуются спокойные треки (Lo-Fi, Ambient, Nature) с низкой энергией ($\le 5$).
-  - Если большинство отдыхает $\to$ фаза **`break`**: рекомендуются энергичные треки (Synthwave, Chillhop) для подзарядки.
+### 1. Virtual Coworking and Adaptive Audio
+- A user creates a public or private room with a participant limit (for example, from 2 to 50 seats).
+- Users join the room through `POST /rooms/{id}/members`. When the last participant leaves, the room is automatically deleted.
+- **Live status synchronization**: `GET /rooms/{id}/members` reflects the current activity of all participants in real time.
+- **Adaptive audio**: the algorithm analyzes the ratio of users working versus taking a break:
+  - If at least 50% of participants are focused → the room enters **`focus`** mode and recommends calm low-energy tracks (Lo-Fi, Ambient, Nature).
+  - If most participants are resting → the room enters **`break`** mode and recommends more energetic tracks (Synthwave, Chillhop) to help them recharge.
 
-### 2. Управление фокус-сессиями и задачами (Focus Timer & Tasks)
-- Пользователь создает задачу (ToDo) с оценкой в помидорках и запускает сессию (`POST /sessions`). Поддерживаются режимы `pomodoro` (25/5), `short` (15/3), `deep_work` (50/10) и `custom` (ручной ввод).
-- **Машина состояний**: `ACTIVE` $\leftrightarrow$ `PAUSED` $\to$ `COMPLETED` / `ENDED_EARLY` / `CANCELLED`.
-- **Бизнес-правила**:
-  - У пользователя не может быть двух активных сессий одновременно (возвращается `409 Conflict`).
-  - Лимит пауз: не более 3 раз за одну сессию.
-  - Попытка завершить сессию раньше времени без флага подтверждения вызывает `409 Conflict` (с расчетом оставшихся секунд). Завершение с `force=true` переводит статус в `ended_early` и начисляет только пропорциональный XP.
-  - При честном завершении таймера автоматически засчитывается выполненная помидорка в привязанной задаче.
+### 2. Focus Sessions and Task Management
+- A user creates a task (ToDo) with a pomodoro estimate and starts a session using `POST /sessions`.
+- Supported focus session modes include active work and breaks.
+- **State machine**: `ACTIVE` ↔ `PAUSED` → `COMPLETED` / `ENDED_EARLY` / `CANCELLED`.
+- **Business rules**:
+  - A user cannot have two active sessions at the same time; the API returns `409 Conflict`.
+  - The pause limit is no more than 3 pauses per session.
+  - Ending a session early without confirmation triggers `409 Conflict`, with remaining time considered.
+  - When a session ends honestly, the completed pomodoro is automatically credited to the linked task.
 
-### 3. Геймификация, стрики и лидерборды (Gamification Engine)
-- **Расчет XP**:
-  - Базовые очки: 2 XP за каждую минуту честного фокуса.
-  - Бонус за полное завершение сессии: +20 XP.
-  - Бонус за сессию без единой паузы ("Laser Focus"): +10 XP.
-  - Бонус за совместную работу в комнате: +5 XP за каждого работающего тиммейта.
-  - Ежедневный стрик: +5 XP за каждый день непрерывного фокуса.
-- **Динамические уровни**: расчет уровня $N$ по квадратичной шкале:
+### 3. Gamification, Streaks, and Leaderboards
+- **XP calculation**:
+  - Base reward: 2 XP per minute of honest focus.
+  - Bonus for successful session completion: +20 XP.
+  - Bonus for a session without any pauses (“Laser Focus”): +10 XP.
+  - Coworking bonus: +5 XP for each teammate actively working in the room.
+  - Daily streak bonus: +5 XP for each consecutive day of focus.
+- **Dynamic levels**: level `N` is calculated using the quadratic formula:
   $$XP(N) = 50 \times (N - 1) \times N$$
-  Присваиваются звания от *Listener* (1) до *Zen Legend* (20).
-- **Автоматические ачивки**: проверяются автоматически при закрытии сессий и задач (например: `first_tune_in`, `laser_focus`, `better_together`, `deep_diver`, `unstoppable`).
-- **Лидерборды**: глобальные и внутрикомнатные топы по 4 метрикам: `xp`, `focus_minutes`, `streak`, `sessions`.
+  Titles are assigned from *Listener* (1) to *Zen Legend* (20).
+- **Automatic achievements**: achievements are checked automatically when sessions and tasks are completed (for example: `first_tune_in`, `laser_focus`, and others).
+- **Leaderboards**: global and in-room rankings across 4 metrics: `xp`, `focus_minutes`, `streak`, and `sessions`.
 
 ---
 
-## 🛠 Запуск и тестирование
+## 🛠 Running and Testing
 
-### 1. Установка зависимостей
+### 1. Install dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Запуск сервера
+### 2. Start the server
 ```bash
 uvicorn app.main:app --reload --port 8000
 ```
 
-### 3. Интерактивная документация (Swagger UI)
-Откройте в браузере:
+### 3. Interactive API Documentation (Swagger UI)
+Open the following in your browser:
 - **Swagger UI**: [http://localhost:8000/docs](http://localhost:8000/docs)
 - **ReDoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
 
-Для эндпоинтов, требующих авторизации (изменение профиля, пауза сессии, смена музыки), передавайте заголовок `X-User-Id: <id_пользователя>` (по умолчанию в демо-данных созданы пользователи с ID 1, 2, 3).
+For endpoints that require authorization (such as profile updates, pausing a session, or changing music), send the required header values described in the API.
 
-### 4. Запуск автоматических тестов
+### 4. Run automated tests
 ```bash
 python3 tests/test_api.py
 ```
