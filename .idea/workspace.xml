@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ChangeListManager">
+    <list default="true" id="e2635521-3270-43a1-9cee-fc25d633d7ab" name="Changes" comment="" />
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/yerkoshs/Web_Assignment.git",
+    "accountId": "1953ee62-6300-440c-b6f7-1e31ed56a81b"
+  }
+}]]></component>
+  <component name="NextEditCompletionFeaturesState">
+    <decayedCancelled>
+      <entry key="MS100" value="1.442277675134646" />
+      <entry key="MS500" value="3.048577165759198" />
+      <entry key="S2" value="5.845349926449451" />
+      <entry key="S5" value="8.167535157574749" />
+      <entry key="S10" value="10.87774929636706" />
+      <entry key="S30" value="15.18573320344004" />
+      <entry key="S60" value="16.900894875098217" />
+      <entry key="M2" value="17.89713729107721" />
+      <entry key="M5" value="18.545310903534975" />
+      <entry key="M10" value="18.770361491465724" />
+      <entry key="M15" value="18.84731023213585" />
+      <entry key="M30" value="18.953630972717256" />
+      <entry key="H1" value="19.136635663950017" />
+      <entry key="H2" value="19.39929848781256" />
+      <entry key="H4" value="19.63734290578665" />
+      <entry key="D1" value="19.92839273456562" />
+      <entry key="W1" value="19.989456725165166" />
+    </decayedCancelled>
+    <decayedSelected>
+      <entry key="MS100" value="0.0" />
+      <entry key="MS500" value="0.0" />
+      <entry key="S2" value="0.0" />
+      <entry key="S5" value="0.0" />
+      <entry key="S10" value="0.0" />
+      <entry key="S30" value="0.0" />
+      <entry key="S60" value="0.0" />
+      <entry key="M2" value="0.0" />
+      <entry key="M5" value="0.0" />
+      <entry key="M10" value="0.0" />
+      <entry key="M15" value="0.0" />
+      <entry key="M30" value="0.0" />
+      <entry key="H1" value="0.0" />
+      <entry key="H2" value="0.0" />
+      <entry key="H4" value="0.0" />
+      <entry key="D1" value="0.0" />
+      <entry key="W1" value="0.0" />
+    </decayedSelected>
+    <decayedShown>
+      <entry key="MS100" value="1.364086591838532" />
+      <entry key="MS500" value="3.0135864784556126" />
+      <entry key="S2" value="5.830617938379144" />
+      <entry key="S5" value="8.159273188170284" />
+      <entry key="S10" value="10.871841774311513" />
+      <entry key="S30" value="15.1827589850689" />
+      <entry key="S60" value="16.899204290745367" />
+      <entry key="M2" value="17.896232685785247" />
+      <entry key="M5" value="18.5449335987683" />
+      <entry key="M10" value="18.770170117648032" />
+      <entry key="M15" value="18.84718130190789" />
+      <entry key="M30" value="18.95355411240289" />
+      <entry key="H1" value="19.136567800833195" />
+      <entry key="H2" value="19.39923981876212" />
+      <entry key="H4" value="19.637301968005445" />
+      <entry key="D1" value="19.928383515601396" />
+      <entry key="W1" value="19.989455335986506" />
+    </decayedShown>
+  </component>
+  <component name="ProjectColorInfo"><![CDATA[{
+  "associatedIndex": 3,
+  "fromUser": false
+}]]></component>
+  <component name="ProjectId" id="3LxQeAv4YZZYgweHtiKzMWV1HxB" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "Python.users.executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
+    "codeWithMe.voiceChat.enabledByDefault": "false",
+    "git-widget-placeholder": "main",
+    "last_opened_file_path": "/Users/sanatyluyernat/Desktop/focusradio",
+    "python.packages.toolwindow.project.migrated.to.right.top.v2": "true",
+    "settings.editor.selected.configurable": "configurable.group.build"
+  }
+}]]></component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="e2635521-3270-43a1-9cee-fc25d633d7ab" name="Changes" comment="" />
+      <created>1794393332312</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1794393332312</updated>
+      <workItem from="1794393333447" duration="3187000" />
+    </task>
+    <servers />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="com.intellij.coverage.CoverageDataManagerImpl">
+    <SUITE FILE_PATH="coverage/focusradio$users.coverage" NAME="users Coverage Results" MODIFIED="1794393741700" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/app/routers" />
+  </component>
+</project>
