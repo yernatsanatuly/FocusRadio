@@ -1,3 +1,9 @@
+"""In-memory data store.
+
+All application data lives in dictionaries on a single `Database` instance.
+Services receive the database through FastAPI dependency injection
+(`get_db`) so tests can reset it easily.
+"""
 from __future__ import annotations
 
 from itertools import count
@@ -32,6 +38,9 @@ def get_db() -> Database:
     return db
 
 
+# --------------------------------------------------------------------------- #
+# Demo data
+# --------------------------------------------------------------------------- #
 _DEMO_TRACKS = [
     ("Rainy Library", "LoFi Owl", Genre.LOFI, Mood.FOCUS, 3, 184, 72),
     ("Midnight Notes", "Chillhop Cat", Genre.LOFI, Mood.FOCUS, 4, 201, 80),
@@ -47,6 +56,7 @@ _DEMO_TRACKS = [
 
 
 def seed_demo_data(database: Database) -> None:
+    """Populate the store with a few tracks, users and a public room."""
     for title, artist, genre, mood, energy, duration, bpm in _DEMO_TRACKS:
         tid = database.next_id("tracks")
         database.tracks[tid] = Track(

@@ -1,3 +1,15 @@
+"""Domain exceptions and their JSON error handlers.
+
+Every error returned by the API has the same shape:
+
+    {
+      "error": {
+        "code": "ROOM_FULL",
+        "message": "Room 'Deep Work' is full (5/5)",
+        "details": {...}
+      }
+    }
+"""
 from typing import Any, Optional
 
 from fastapi import FastAPI, Request, status
@@ -48,6 +60,7 @@ class ForbiddenError(AppError):
 
 
 class BusinessRuleError(AppError):
+    """Request is well-formed but violates a domain rule."""
 
     status_code = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
     code = "BUSINESS_RULE_VIOLATION"

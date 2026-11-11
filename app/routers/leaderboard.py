@@ -1,3 +1,4 @@
+"""/leaderboard endpoint."""
 from fastapi import APIRouter, Query
 
 from app.core.dependencies import Users

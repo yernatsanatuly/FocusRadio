@@ -1,3 +1,4 @@
+"""Shared schemas."""
 from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, Field
@@ -26,6 +27,7 @@ class MessageResponse(BaseModel):
     message: str
 
 
+# Re-usable OpenAPI documentation for error responses.
 def error_responses(*codes: int) -> dict[int | str, dict[str, Any]]:
     descriptions = {
         400: "Bad request",

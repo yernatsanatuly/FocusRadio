@@ -1,3 +1,4 @@
+"""/tracks endpoints — audio catalog."""
 from typing import Optional
 
 from fastapi import APIRouter, Query, status

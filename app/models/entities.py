@@ -1,3 +1,8 @@
+"""Internal domain entities stored in the in-memory database.
+
+These are plain dataclasses (not Pydantic models) so the storage layer is
+independent from the API schemas.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
