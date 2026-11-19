@@ -1,8 +1,6 @@
 from datetime import datetime
 from typing import Literal, Optional
-
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
 from app.models.enums import Genre, Mood
 from app.schemas.tracks import TrackResponse
 

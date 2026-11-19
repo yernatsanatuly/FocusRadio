@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError, OperationalError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
@@ -48,8 +49,6 @@ class ForbiddenError(AppError):
 
 
 class BusinessRuleError(AppError):
-    """Request is well-formed but violates a domain rule."""
-
     status_code = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
     code = "BUSINESS_RULE_VIOLATION"
 
@@ -80,6 +79,51 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422),
             content=jsonable_encoder(
                 _error_body("VALIDATION_ERROR", "Request validation failed", {"errors": errors})
+            ),
+        )
+
+    @app.exception_handler(IntegrityError)
+    async def integrity_error_handler(_: Request, exc: IntegrityError) -> JSONResponse:
+        sqlstate = getattr(exc.orig, "sqlstate", None) or getattr(exc.orig, "pgcode", None)
+        if sqlstate == "23505":
+            return JSONResponse(
+                status_code=status.HTTP_409_CONFLICT,
+                content=_error_body(
+                    "DATABASE_CONFLICT",
+                    "Resource violates a uniqueness constraint",
+                ),
+            )
+        if sqlstate == "23503":
+            return JSONResponse(
+                status_code=status.HTTP_409_CONFLICT,
+                content=_error_body(
+                    "FOREIGN_KEY_VIOLATION",
+                    "Operation violates a relationship constraint",
+                ),
+            )
+        if sqlstate in ("23514", "23502"):
+            return JSONResponse(
+                status_code=getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422),
+                content=_error_body(
+                    "CONSTRAINT_VIOLATION",
+                    "Data violates a database integrity constraint",
+                ),
+            )
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content=_error_body(
+                "DATABASE_INTEGRITY_ERROR",
+                "Database integrity error",
+            ),
+        )
+
+    @app.exception_handler(OperationalError)
+    async def operational_error_handler(_: Request, exc: OperationalError) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content=_error_body(
+                "DATABASE_UNAVAILABLE",
+                "Database service is temporarily unavailable",
             ),
         )
 

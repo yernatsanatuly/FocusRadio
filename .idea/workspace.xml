@@ -1,7 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="ALL" />
+  </component>
   <component name="ChangeListManager">
-    <list default="true" id="e2635521-3270-43a1-9cee-fc25d633d7ab" name="Changes" comment="" />
+    <list default="true" id="e2635521-3270-43a1-9cee-fc25d633d7ab" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/core/database.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/core/database.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/models/enums.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/models/enums.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/schemas/rooms.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/schemas/rooms.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/schemas/tasks.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/schemas/tasks.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/schemas/users.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/schemas/users.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_api.py" beforeDir="false" afterPath="$PROJECT_DIR$/tests/test_api.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -10,40 +22,40 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
-  "lastFilter": {
-    "state": "OPEN",
-    "assignee": "yernatsanatuly"
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;yernatsanatuly&quot;
   }
-}]]></component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/yerkoshs/Web_Assignment.git",
-    "accountId": "1953ee62-6300-440c-b6f7-1e31ed56a81b"
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/yernatsanatuly/FocusRadio.git&quot;,
+    &quot;accountId&quot;: &quot;1953ee62-6300-440c-b6f7-1e31ed56a81b&quot;
   }
-}]]></component>
+}</component>
   <component name="HighlightingSettingsPerFile">
     <setting file="file://$PROJECT_DIR$/app/schemas/leaderboard.py" root0="SKIP_HIGHLIGHTING" />
   </component>
   <component name="NextEditCompletionFeaturesState">
     <decayedCancelled>
-      <entry key="MS100" value="1.464699604400491" />
-      <entry key="MS500" value="3.105992276410826" />
-      <entry key="S2" value="5.459772889998694" />
-      <entry key="S5" value="9.50577812054086" />
-      <entry key="S10" value="14.033137069117878" />
-      <entry key="S30" value="19.739340910394603" />
-      <entry key="S60" value="21.72984727341669" />
-      <entry key="M2" value="23.440462436616357" />
-      <entry key="M5" value="32.2897051478063" />
-      <entry key="M10" value="48.08930915782576" />
-      <entry key="M15" value="60.90719005112075" />
-      <entry key="M30" value="84.9715499620711" />
-      <entry key="H1" value="105.29291022353337" />
-      <entry key="H2" value="118.93860585762168" />
-      <entry key="H4" value="126.96365717001571" />
-      <entry key="D1" value="134.41465401660622" />
-      <entry key="W1" value="135.77143909885578" />
+      <entry key="MS100" value="1.0813338659653697" />
+      <entry key="MS500" value="1.608430761067189" />
+      <entry key="S2" value="2.1164029190414064" />
+      <entry key="S5" value="2.510705805999666" />
+      <entry key="S10" value="2.7233186836243246" />
+      <entry key="S30" value="2.899465370820893" />
+      <entry key="S60" value="2.9596820677500943" />
+      <entry key="M2" value="3.687158529796958" />
+      <entry key="M5" value="11.756663911777702" />
+      <entry key="M10" value="25.296971515801665" />
+      <entry key="M15" value="37.065170550691654" />
+      <entry key="M30" value="69.49971812889217" />
+      <entry key="H1" value="120.54261083272259" />
+      <entry key="H2" value="175.30444291210563" />
+      <entry key="H4" value="221.52877117211514" />
+      <entry key="D1" value="360.2522896425413" />
+      <entry key="W1" value="437.21312709829465" />
     </decayedCancelled>
     <decayedSelected>
       <entry key="MS100" value="0.0" />
@@ -65,48 +77,93 @@
       <entry key="W1" value="0.0" />
     </decayedSelected>
     <decayedShown>
-      <entry key="MS100" value="1.3843320575301445" />
-      <entry key="MS500" value="3.0639463561757134" />
-      <entry key="S2" value="5.441611952154447" />
-      <entry key="S5" value="9.493095002916732" />
-      <entry key="S10" value="14.023950669660083" />
-      <entry key="S30" value="19.735135019869617" />
-      <entry key="S60" value="21.72754364507628" />
-      <entry key="M2" value="23.439058450772592" />
-      <entry key="M5" value="32.2881883805005" />
-      <entry key="M10" value="48.087827703910534" />
-      <entry key="M15" value="60.905901226561056" />
-      <entry key="M30" value="84.97067800101101" />
-      <entry key="H1" value="105.29237756319002" />
-      <entry key="H2" value="118.93829392631753" />
-      <entry key="H4" value="126.96348228079589" />
-      <entry key="D1" value="134.41462101689848" />
-      <entry key="W1" value="135.77143426775456" />
+      <entry key="MS100" value="0.10825385504643255" />
+      <entry key="MS500" value="1.0837384877741456" />
+      <entry key="S2" value="1.939154723510349" />
+      <entry key="S5" value="2.431843899173705" />
+      <entry key="S10" value="2.682016204724407" />
+      <entry key="S30" value="2.885205876174984" />
+      <entry key="S60" value="2.9524816553621305" />
+      <entry key="M2" value="3.683422075562894" />
+      <entry key="M5" value="11.754595718173713" />
+      <entry key="M10" value="25.295436389440354" />
+      <entry key="M15" value="37.06386158362018" />
+      <entry key="M30" value="69.49875033843531" />
+      <entry key="H1" value="120.54195859628386" />
+      <entry key="H2" value="175.30404688004197" />
+      <entry key="H4" value="221.52854488982325" />
+      <entry key="D1" value="360.25222930638813" />
+      <entry key="W1" value="437.2131163544892" />
     </decayedShown>
   </component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 3,
-  "fromUser": false
-}]]></component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 3,
+  &quot;fromUser&quot;: false
+}</component>
   <component name="ProjectId" id="3LxQeAv4YZZYgweHtiKzMWV1HxB" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "Python.users.executor": "Run",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
-    "codeWithMe.voiceChat.enabledByDefault": "false",
-    "git-widget-placeholder": "main",
-    "last_opened_file_path": "/Users/sanatyluyernat/Desktop/focusradio",
-    "python.packages.toolwindow.project.migrated.to.right.top.v2": "true",
-    "settings.editor.selected.configurable": "configurable.group.build"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;Python.test_api.executor&quot;: &quot;Run&quot;,
+    &quot;Python.users.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
+    &quot;codeWithMe.voiceChat.enabledByDefault&quot;: &quot;false&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/Users/sanatyluyernat/Desktop/focusradio&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;python.packages.toolwindow.project.migrated.to.right.top.v2&quot;: &quot;true&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;configurable.group.build&quot;
   }
-}]]></component>
+}</component>
+  <component name="RunManager">
+    <configuration name="test_api" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="focusradio" />
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/tests" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <option name="DEBUG_JUST_MY_CODE" value="false" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="RUN_TOOL" value="" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/tests/test_api.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Python.test_api" />
+      </list>
+    </recent_temporary>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-python-sdk-ebb3072d7bdf-5bd6d13a2a75-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-262.11879.98" />
+      </set>
+    </attachedChunks>
+  </component>
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
       <changelist id="e2635521-3270-43a1-9cee-fc25d633d7ab" name="Changes" comment="" />
@@ -114,9 +171,14 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1794393332312</updated>
-      <workItem from="1794393333447" duration="5390000" />
+      <workItem from="1794393333447" duration="12569000" />
+      <workItem from="1794490792979" duration="9000" />
+      <workItem from="1794545206537" duration="2508000" />
     </task>
     <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
     <option name="TAB_STATES">

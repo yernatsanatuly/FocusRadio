@@ -1,11 +1,13 @@
-"""Personal task list linked to focus sessions."""
+"""Personal task list linked to focus sessions, backed by PostgreSQL."""
 from __future__ import annotations
 
 from typing import Optional
 
-from app.core.database import Database
+from sqlalchemy import case, func, select, update
+from sqlalchemy.orm import Session
+
 from app.core.exceptions import BusinessRuleError, ConflictError
-from app.models.entities import Task, utcnow
+from app.models import FocusSession, Task, utcnow
 from app.models.enums import ACTIVE_SESSION_STATUSES, TaskPriority, TaskStatus
 from app.schemas.tasks import TaskCreate, TaskResponse, TaskUpdate, TaskUpdateResult
 from app.services import gamification
@@ -14,61 +16,98 @@ from app.services.common import (
     ensure_same_user,
     get_task,
     get_user,
-    paginate,
+    paginate_query,
 )
 
 MAX_OPEN_TASKS = 50
-_PRIORITY_ORDER = {TaskPriority.HIGH: 0, TaskPriority.MEDIUM: 1, TaskPriority.LOW: 2}
 
 
 def to_response(task: Task) -> TaskResponse:
-    progress = 100.0 if task.status == TaskStatus.DONE else round(
-        min(task.completed_pomodoros / task.estimated_pomodoros, 1.0) * 100, 1)
+    progress = (
+        100.0
+        if task.status == TaskStatus.DONE
+        else round(min(task.completed_pomodoros / task.estimated_pomodoros, 1.0) * 100, 1)
+    )
     return TaskResponse(
-        id=task.id, user_id=task.user_id, title=task.title, description=task.description,
-        priority=task.priority, status=task.status,
+        id=task.id,
+        user_id=task.user_id,
+        title=task.title,
+        description=task.description,
+        priority=task.priority,
+        status=task.status,
         estimated_pomodoros=task.estimated_pomodoros,
-        completed_pomodoros=task.completed_pomodoros, progress_percent=progress,
-        created_at=task.created_at, completed_at=task.completed_at,
+        completed_pomodoros=task.completed_pomodoros,
+        progress_percent=progress,
+        created_at=task.created_at,
+        completed_at=task.completed_at,
     )
 
 
 class TaskService:
-    def __init__(self, db: Database) -> None:
+    def __init__(self, db: Session) -> None:
         self.db = db
 
-    def list(self, *, user_id: Optional[int], status: Optional[TaskStatus],
-             priority: Optional[TaskPriority], limit: int, offset: int) -> dict:
+    def list(
+        self,
+        *,
+        user_id: Optional[int],
+        status: Optional[TaskStatus],
+        priority: Optional[TaskPriority],
+        limit: int,
+        offset: int,
+    ) -> dict:
         if user_id is not None:
             get_user(self.db, user_id)
-        tasks = [
-            t for t in self.db.tasks.values()
-            if (user_id is None or t.user_id == user_id)
-            and (status is None or t.status == status)
-            and (priority is None or t.priority == priority)
-        ]
-        # open tasks first, then by priority, then oldest first
-        tasks.sort(key=lambda t: (t.status == TaskStatus.DONE, _PRIORITY_ORDER[t.priority], t.id))
-        page = paginate(tasks, limit, offset)
-        page["items"] = [to_response(t) for t in page["items"]]
-        return page
+
+        stmt = select(Task)
+        if user_id is not None:
+            stmt = stmt.where(Task.user_id == user_id)
+        if status is not None:
+            stmt = stmt.where(Task.status == status)
+        if priority is not None:
+            stmt = stmt.where(Task.priority == priority)
+
+        is_done_order = case((Task.status == TaskStatus.DONE, 1), else_=0)
+        priority_order = case(
+            (Task.priority == TaskPriority.HIGH, 0),
+            (Task.priority == TaskPriority.MEDIUM, 1),
+            else_=2,
+        )
+        stmt = stmt.order_by(is_done_order, priority_order, Task.id.asc())
+
+        items, total = paginate_query(self.db, stmt, limit, offset)
+        return {
+            "items": [to_response(t) for t in items],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
 
     def get(self, task_id: int) -> TaskResponse:
         return to_response(get_task(self.db, task_id))
 
     def create(self, data: TaskCreate) -> TaskResponse:
         user = get_user(self.db, data.user_id)
-        open_tasks = [t for t in self.db.tasks.values()
-                      if t.user_id == user.id and t.status != TaskStatus.DONE]
-        if len(open_tasks) >= MAX_OPEN_TASKS:
-            raise BusinessRuleError(f"A user can have at most {MAX_OPEN_TASKS} open tasks",
-                                    code="TOO_MANY_OPEN_TASKS")
-        if any(t.title.lower() == data.title.lower() for t in open_tasks):
-            raise ConflictError("You already have an open task with this title",
-                                code="DUPLICATE_TASK")
-        tid = self.db.next_id("tasks")
-        task = Task(id=tid, **data.model_dump())
-        self.db.tasks[tid] = task
+        open_count = (
+            self.db.scalar(
+                select(func.count(Task.id)).where(
+                    Task.user_id == user.id,
+                    Task.status != TaskStatus.DONE,
+                )
+            )
+            or 0
+        )
+        if open_count >= MAX_OPEN_TASKS:
+            raise BusinessRuleError(
+                f"A user can have at most {MAX_OPEN_TASKS} open tasks",
+                code="TOO_MANY_OPEN_TASKS",
+            )
+        self._ensure_open_title_unique(user.id, data.title)
+
+        task = Task(**data.model_dump())
+        self.db.add(task)
+        self.db.commit()
+        self.db.refresh(task)
         return to_response(task)
 
     def update(self, task_id: int, acting_user_id: int, data: TaskUpdate) -> TaskUpdateResult:
@@ -77,19 +116,27 @@ class TaskService:
         new_status = changes.pop("status", None)
 
         if task.status == TaskStatus.DONE and changes and new_status in (None, TaskStatus.DONE):
-            raise ConflictError("Completed tasks are read-only; reopen the task first "
-                                "(status=todo or in_progress)", code="TASK_COMPLETED_LOCKED")
-        if "estimated_pomodoros" in changes and changes["estimated_pomodoros"] < task.completed_pomodoros:
+            raise ConflictError(
+                "Completed tasks are read-only; reopen the task first "
+                "(status=todo or in_progress)",
+                code="TASK_COMPLETED_LOCKED",
+            )
+        if (
+            "estimated_pomodoros" in changes
+            and changes["estimated_pomodoros"] < task.completed_pomodoros
+        ):
             raise BusinessRuleError(
                 "estimated_pomodoros cannot be lower than already completed pomodoros",
                 code="ESTIMATE_BELOW_PROGRESS",
                 details={"completed_pomodoros": task.completed_pomodoros},
             )
-        if "title" in changes and changes["title"].lower() != task.title.lower():
-            if any(t.id != task.id and t.user_id == task.user_id and t.status != TaskStatus.DONE
-                   and t.title.lower() == changes["title"].lower() for t in self.db.tasks.values()):
-                raise ConflictError("You already have an open task with this title",
-                                    code="DUPLICATE_TASK")
+
+        effective_title = changes.get("title", task.title)
+        effective_status = new_status if new_status is not None else task.status
+        reopening = task.status == TaskStatus.DONE and effective_status != TaskStatus.DONE
+        title_changed = "title" in changes and changes["title"].lower() != task.title.lower()
+        if effective_status != TaskStatus.DONE and (title_changed or reopening):
+            self._ensure_open_title_unique(task.user_id, effective_title, exclude_id=task.id)
 
         for key, value in changes.items():
             setattr(task, key, value)
@@ -99,29 +146,56 @@ class TaskService:
             if new_status == TaskStatus.DONE:
                 task.status = TaskStatus.DONE
                 task.completed_at = utcnow()
-                if not task.xp_awarded:  # XP is granted only once per task
+                if not task.xp_awarded:
                     task.xp_awarded = True
-                    new_achievements = gamification.reward_task_completion(
-                        self.db.users[task.user_id])
-            else:  # reopen or move between todo/in_progress
+                    owner = get_user(self.db, task.user_id)
+                    new_achievements = gamification.reward_task_completion(self.db, owner)
+            else:
                 task.status = new_status
                 task.completed_at = None
 
+        self.db.commit()
+        self.db.refresh(task)
         return TaskUpdateResult(task=to_response(task), new_achievements=new_achievements)
 
     def delete(self, task_id: int, acting_user_id: int) -> None:
         task = self._owned(task_id, acting_user_id)
-        for s in self.db.sessions.values():
-            if s.task_id == task.id and s.status in ACTIVE_SESSION_STATUSES:
-                raise ConflictError("Task is linked to a running focus session",
-                                    code="TASK_IN_ACTIVE_SESSION", details={"session_id": s.id})
-        for s in self.db.sessions.values():
-            if s.task_id == task.id:
-                s.task_id = None
-        del self.db.tasks[task.id]
+        active_session_id = self.db.scalar(
+            select(FocusSession.id).where(
+                FocusSession.task_id == task.id,
+                FocusSession.status.in_(ACTIVE_SESSION_STATUSES),
+            )
+        )
+        if active_session_id is not None:
+            raise ConflictError(
+                "Task is linked to a running focus session",
+                code="TASK_IN_ACTIVE_SESSION",
+                details={"session_id": active_session_id},
+            )
+        self.db.execute(
+            update(FocusSession).where(FocusSession.task_id == task.id).values(task_id=None)
+        )
+        self.db.delete(task)
+        self.db.commit()
 
     def _owned(self, task_id: int, acting_user_id: int) -> Task:
         ensure_actor_exists(self.db, acting_user_id)
         task = get_task(self.db, task_id)
         ensure_same_user(acting_user_id, task.user_id, "task")
         return task
+
+    def _ensure_open_title_unique(
+        self, user_id: int, title: str, *, exclude_id: Optional[int] = None
+    ) -> None:
+        stmt = select(Task.id).where(
+            Task.user_id == user_id,
+            Task.status != TaskStatus.DONE,
+            func.lower(Task.title) == title.lower(),
+        )
+        if exclude_id is not None:
+            stmt = stmt.where(Task.id != exclude_id)
+        if self.db.scalar(stmt) is not None:
+            raise ConflictError(
+                "You already have an open task with this title",
+                code="DUPLICATE_TASK",
+            )

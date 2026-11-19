@@ -1,8 +1,9 @@
 from typing import Annotated
 
 from fastapi import Depends, Header, Query
+from sqlalchemy.orm import Session
 
-from app.core.database import Database, get_db
+from app.core.database import get_db
 from app.services.room_service import RoomService
 from app.services.session_service import SessionService
 from app.services.task_service import TaskService
@@ -18,7 +19,7 @@ ActingUserId = Annotated[
     ),
 ]
 
-DB = Annotated[Database, Depends(get_db)]
+DB = Annotated[Session, Depends(get_db)]
 
 Limit = Annotated[int, Query(ge=1, le=100, description="Page size")]
 Offset = Annotated[int, Query(ge=0, description="Number of items to skip")]

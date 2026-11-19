@@ -1,0 +1,22 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: focusradio-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-focusradio}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-focusradio}
+      POSTGRES_DB: ${POSTGRES_DB:-focusradio}
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - focusradio_pgdata:/var/lib/postgresql/data
+      - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/01-init-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-focusradio} -d ${POSTGRES_DB:-focusradio}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  focusradio_pgdata:

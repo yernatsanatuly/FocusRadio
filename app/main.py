@@ -5,15 +5,23 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.core.database import db, seed_demo_data
+from app.core.database import SessionLocal
 from app.core.exceptions import register_exception_handlers
+from app.core.seed import seed_demo_data
 from app.routers import leaderboard, rooms, sessions, tasks, tracks, users
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    if settings.seed_demo_data and not db.users:
-        seed_demo_data(db)
+    if settings.seed_demo_data:
+        db = SessionLocal()
+        try:
+            seed_demo_data(db)
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
     yield
 
 
@@ -31,7 +39,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
- )
+)
 
 register_exception_handlers(app)
 

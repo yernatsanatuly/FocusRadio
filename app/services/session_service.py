@@ -1,4 +1,4 @@
-"""Focus session (timer) workflow.
+"""Focus session (timer) workflow backed by PostgreSQL.
 
 State machine:
 
@@ -14,10 +14,12 @@ import math
 from datetime import datetime
 from typing import Optional
 
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
 from app.config import settings
-from app.core.database import Database
 from app.core.exceptions import BusinessRuleError, ConflictError, ForbiddenError
-from app.models.entities import FocusSession, Task, utcnow
+from app.models import FocusSession, RoomMember, Task, utcnow
 from app.models.enums import (
     ACTIVE_SESSION_STATUSES,
     SessionMode,
@@ -38,7 +40,7 @@ from app.services.common import (
     get_session,
     get_task,
     get_user,
-    paginate,
+    paginate_query,
 )
 
 PRESETS: dict[SessionMode, tuple[int, int]] = {
@@ -48,9 +50,6 @@ PRESETS: dict[SessionMode, tuple[int, int]] = {
 }
 
 
-# --------------------------------------------------------------------------- #
-# Time helpers
-# --------------------------------------------------------------------------- #
 def planned_seconds(session: FocusSession) -> float:
     return session.focus_minutes * settings.seconds_per_minute
 
@@ -98,29 +97,41 @@ def to_response(session: FocusSession) -> SessionResponse:
 
 
 class SessionService:
-    def __init__(self, db: Database) -> None:
+    def __init__(self, db: Session) -> None:
         self.db = db
 
-    # ---------------------------------------------------------------- queries
-    def list(self, *, user_id: Optional[int], room_id: Optional[int],
-             status: Optional[SessionStatus], mode: Optional[SessionMode],
-             limit: int, offset: int) -> dict:
-        items = [
-            s for s in self.db.sessions.values()
-            if (user_id is None or s.user_id == user_id)
-            and (room_id is None or s.room_id == room_id)
-            and (status is None or s.status == status)
-            and (mode is None or s.mode == mode)
-        ]
-        items.sort(key=lambda s: s.started_at, reverse=True)
-        page = paginate(items, limit, offset)
-        page["items"] = [to_response(s) for s in page["items"]]
-        return page
+    def list(
+        self,
+        *,
+        user_id: Optional[int],
+        room_id: Optional[int],
+        status: Optional[SessionStatus],
+        mode: Optional[SessionMode],
+        limit: int,
+        offset: int,
+    ) -> dict:
+        stmt = select(FocusSession)
+        if user_id is not None:
+            stmt = stmt.where(FocusSession.user_id == user_id)
+        if room_id is not None:
+            stmt = stmt.where(FocusSession.room_id == room_id)
+        if status is not None:
+            stmt = stmt.where(FocusSession.status == status)
+        if mode is not None:
+            stmt = stmt.where(FocusSession.mode == mode)
+        stmt = stmt.order_by(FocusSession.started_at.desc(), FocusSession.id.desc())
+
+        items, total = paginate_query(self.db, stmt, limit, offset)
+        return {
+            "items": [to_response(s) for s in items],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
 
     def get(self, session_id: int) -> SessionResponse:
         return to_response(get_session(self.db, session_id))
 
-    # --------------------------------------------------------------- commands
     def start(self, data: SessionCreate) -> SessionResponse:
         user = get_user(self.db, data.user_id)
 
@@ -135,28 +146,35 @@ class SessionService:
         task = self._validate_task(data.task_id, user.id) if data.task_id else None
 
         if data.mode == SessionMode.CUSTOM:
-            focus = data.focus_minutes  # validated by schema
+            focus = data.focus_minutes
             brk = data.break_minutes if data.break_minutes is not None else max(1, focus // 5)
         else:
             focus, brk = PRESETS[data.mode]
 
-        sid = self.db.next_id("sessions")
         session = FocusSession(
-            id=sid, user_id=user.id, mode=data.mode, focus_minutes=focus,
-            break_minutes=brk, room_id=user.current_room_id,
-            task_id=task.id if task else None, notes=data.notes,
+            user_id=user.id,
+            mode=data.mode,
+            focus_minutes=focus,
+            break_minutes=brk,
+            room_id=user.current_room_id,
+            task_id=task.id if task else None,
+            notes=data.notes,
         )
-        self.db.sessions[sid] = session
+        self.db.add(session)
         if task and task.status == TaskStatus.TODO:
             task.status = TaskStatus.IN_PROGRESS
+        self.db.commit()
+        self.db.refresh(session)
         return to_response(session)
 
     def update(self, session_id: int, acting_user_id: int, data: SessionUpdate) -> SessionResponse:
         session = self._owned(session_id, acting_user_id)
         if "task_id" in data.model_fields_set:
             if session.status not in ACTIVE_SESSION_STATUSES:
-                raise ConflictError("Task can only be changed while the session is running",
-                                    code="SESSION_ALREADY_FINISHED")
+                raise ConflictError(
+                    "Task can only be changed while the session is running",
+                    code="SESSION_ALREADY_FINISHED",
+                )
             if data.task_id is None:
                 session.task_id = None
             else:
@@ -166,14 +184,18 @@ class SessionService:
                     task.status = TaskStatus.IN_PROGRESS
         if "notes" in data.model_fields_set:
             session.notes = data.notes
+        self.db.commit()
+        self.db.refresh(session)
         return to_response(session)
 
     def pause(self, session_id: int, acting_user_id: int) -> SessionResponse:
         session = self._owned(session_id, acting_user_id)
         self._require_status(session, SessionStatus.ACTIVE, "pause")
         if elapsed_focus_seconds(session) >= planned_seconds(session):
-            raise ConflictError("Focus time is already over — complete the session instead",
-                                code="FOCUS_TIME_OVER")
+            raise ConflictError(
+                "Focus time is already over — complete the session instead",
+                code="FOCUS_TIME_OVER",
+            )
         if session.pause_count >= settings.max_pauses_per_session:
             raise BusinessRuleError(
                 f"A session can be paused at most {settings.max_pauses_per_session} times",
@@ -183,6 +205,8 @@ class SessionService:
         session.status = SessionStatus.PAUSED
         session.paused_at = utcnow()
         session.pause_count += 1
+        self.db.commit()
+        self.db.refresh(session)
         return to_response(session)
 
     def resume(self, session_id: int, acting_user_id: int) -> SessionResponse:
@@ -190,6 +214,8 @@ class SessionService:
         self._require_status(session, SessionStatus.PAUSED, "resume")
         self._close_pause(session)
         session.status = SessionStatus.ACTIVE
+        self.db.commit()
+        self.db.refresh(session)
         return to_response(session)
 
     def complete(self, session_id: int, acting_user_id: int, force: bool) -> SessionFinishResult:
@@ -219,12 +245,16 @@ class SessionService:
             session.focused_seconds = int(elapsed)
 
         mates = self._focusing_room_mates(user.id, user.current_room_id)
-        breakdown, new_achievements = gamification.reward_session(user, session, mates)
+        breakdown, new_achievements = gamification.reward_session(self.db, user, session, mates)
 
-        if session.status == SessionStatus.COMPLETED and session.task_id:
-            task = self.db.tasks.get(session.task_id)
-            if task:
+        if session.status == SessionStatus.COMPLETED and session.task_id is not None:
+            task = self.db.get(Task, session.task_id)
+            if task is not None:
                 task.completed_pomodoros += 1
+
+        self.db.commit()
+        self.db.refresh(session)
+        self.db.refresh(user)
 
         level_after = gamification.level_info(user.xp)
         return SessionFinishResult(
@@ -235,30 +265,36 @@ class SessionService:
             leveled_up=level_after.level > level_before,
             current_streak=user.current_streak,
             new_achievements=new_achievements,
-            suggested_break_minutes=session.break_minutes
-            if session.status == SessionStatus.COMPLETED else 0,
+            suggested_break_minutes=(
+                session.break_minutes if session.status == SessionStatus.COMPLETED else 0
+            ),
         )
 
     def cancel(self, session_id: int, acting_user_id: int) -> SessionResponse:
         session = self._owned(session_id, acting_user_id)
         self._require_running(session, "cancel")
         self.force_cancel(session)
+        self.db.commit()
+        self.db.refresh(session)
         return to_response(session)
 
     def delete(self, session_id: int, acting_user_id: int) -> None:
         session = self._owned(session_id, acting_user_id)
         if session.status in ACTIVE_SESSION_STATUSES:
-            raise ConflictError("A running session cannot be deleted; cancel or complete it first",
-                                code="SESSION_STILL_RUNNING")
-        del self.db.sessions[session_id]
+            raise ConflictError(
+                "A running session cannot be deleted; cancel or complete it first",
+                code="SESSION_STILL_RUNNING",
+            )
+        self.db.delete(session)
+        self.db.commit()
 
-    # ---------------------------------------------------------------- helpers
     def force_cancel(self, session: FocusSession) -> None:
         elapsed = elapsed_focus_seconds(session)
         self._close_pause(session)
         session.status = SessionStatus.CANCELLED
         session.ended_at = utcnow()
         session.focused_seconds = int(elapsed)
+        self.db.flush()
 
     def _owned(self, session_id: int, acting_user_id: int) -> FocusSession:
         ensure_actor_exists(self.db, acting_user_id)
@@ -278,8 +314,10 @@ class SessionService:
             raise ConflictError(
                 f"Cannot {action} a session with status '{session.status.value}'",
                 code="INVALID_SESSION_STATE",
-                details={"current_status": session.status.value,
-                         "required_status": expected.value},
+                details={
+                    "current_status": session.status.value,
+                    "required_status": expected.value,
+                },
             )
 
     @staticmethod
@@ -294,22 +332,31 @@ class SessionService:
     def _validate_task(self, task_id: int, user_id: int) -> Task:
         task = get_task(self.db, task_id)
         if task.user_id != user_id:
-            raise ForbiddenError("You can only focus on your own tasks", code="TASK_NOT_OWNED",
-                                 details={"task_id": task_id})
+            raise ForbiddenError(
+                "You can only focus on your own tasks",
+                code="TASK_NOT_OWNED",
+                details={"task_id": task_id},
+            )
         if task.status == TaskStatus.DONE:
-            raise ConflictError("Task is already done", code="TASK_ALREADY_DONE",
-                                details={"task_id": task_id})
+            raise ConflictError(
+                "Task is already done",
+                code="TASK_ALREADY_DONE",
+                details={"task_id": task_id},
+            )
         return task
 
     def _focusing_room_mates(self, user_id: int, room_id: Optional[int]) -> int:
-        """Number of other room members currently in an ACTIVE session."""
-        if room_id is None or room_id not in self.db.rooms:
+        if room_id is None:
             return 0
-        count = 0
-        for member_id in self.db.rooms[room_id].member_ids:
-            if member_id == user_id:
-                continue
-            s = find_active_session(self.db, member_id)
-            if s and s.status == SessionStatus.ACTIVE:
-                count += 1
-        return count
+        return (
+            self.db.scalar(
+                select(func.count(FocusSession.id))
+                .join(RoomMember, RoomMember.user_id == FocusSession.user_id)
+                .where(
+                    RoomMember.room_id == room_id,
+                    FocusSession.user_id != user_id,
+                    FocusSession.status == SessionStatus.ACTIVE,
+                )
+            )
+            or 0
+        )

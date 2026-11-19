@@ -5,8 +5,11 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Callable, Iterable, Optional
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
 from app.config import settings
-from app.models.entities import FocusSession, User, utcnow
+from app.models import FocusSession, User, UserAchievement, utcnow
 from app.models.enums import LeaderboardMetric, SessionStatus
 from app.schemas.leaderboard import LeaderboardEntry
 from app.schemas.users import AchievementResponse, LevelInfo
@@ -78,55 +81,127 @@ def _completed(ctx: AchievementContext) -> bool:
     return ctx.session is not None and ctx.session.status == SessionStatus.COMPLETED
 
 
-ACHIEVEMENTS: dict[str, Achievement] = {a.code: a for a in [
-    Achievement("first_tune_in", "First Tune-In", "Complete your first focus session",
-                lambda u, c: u.completed_sessions >= 1),
-    Achievement("in_the_groove", "In the Groove", "Complete 5 focus sessions",
-                lambda u, c: u.completed_sessions >= 5),
-    Achievement("focus_machine", "Focus Machine", "Complete 20 focus sessions",
-                lambda u, c: u.completed_sessions >= 20),
-    Achievement("hour_club", "Hour Club", "Accumulate 60 minutes of focus",
-                lambda u, c: u.total_focus_minutes >= 60),
-    Achievement("deep_diver", "Deep Diver", "Complete a single session of 50+ minutes",
-                lambda u, c: _completed(c) and c.session.focus_minutes >= 50),
-    Achievement("laser_focus", "Laser Focus", "Complete a 25+ minute session without pauses",
-                lambda u, c: _completed(c) and c.session.focus_minutes >= 25
-                and c.session.pause_count == 0),
-    Achievement("better_together", "Better Together",
-                "Complete a session while 2+ room mates are focusing too",
-                lambda u, c: _completed(c) and c.focusing_room_mates >= 2),
-    Achievement("on_fire", "On Fire", "Reach a 3-day focus streak",
-                lambda u, c: u.current_streak >= 3),
-    Achievement("unstoppable", "Unstoppable", "Reach a 7-day focus streak",
-                lambda u, c: u.current_streak >= 7),
-    Achievement("task_master", "Task Master", "Complete 5 tasks",
-                lambda u, c: u.completed_tasks >= 5),
-    Achievement("level_5", "Focused Mind", "Reach level 5",
-                lambda u, c: level_for_xp(u.xp) >= 5),
-]}
+ACHIEVEMENTS: dict[str, Achievement] = {
+    a.code: a
+    for a in [
+        Achievement(
+            "first_tune_in",
+            "First Tune-In",
+            "Complete your first focus session",
+            lambda u, c: u.completed_sessions >= 1,
+        ),
+        Achievement(
+            "in_the_groove",
+            "In the Groove",
+            "Complete 5 focus sessions",
+            lambda u, c: u.completed_sessions >= 5,
+        ),
+        Achievement(
+            "focus_machine",
+            "Focus Machine",
+            "Complete 20 focus sessions",
+            lambda u, c: u.completed_sessions >= 20,
+        ),
+        Achievement(
+            "hour_club",
+            "Hour Club",
+            "Accumulate 60 minutes of focus",
+            lambda u, c: u.total_focus_minutes >= 60,
+        ),
+        Achievement(
+            "deep_diver",
+            "Deep Diver",
+            "Complete a single session of 50+ minutes",
+            lambda u, c: _completed(c) and c.session.focus_minutes >= 50,
+        ),
+        Achievement(
+            "laser_focus",
+            "Laser Focus",
+            "Complete a 25+ minute session without pauses",
+            lambda u, c: _completed(c)
+            and c.session.focus_minutes >= 25
+            and c.session.pause_count == 0,
+        ),
+        Achievement(
+            "better_together",
+            "Better Together",
+            "Complete a session while 2+ room mates are focusing too",
+            lambda u, c: _completed(c) and c.focusing_room_mates >= 2,
+        ),
+        Achievement(
+            "on_fire",
+            "On Fire",
+            "Reach a 3-day focus streak",
+            lambda u, c: u.current_streak >= 3,
+        ),
+        Achievement(
+            "unstoppable",
+            "Unstoppable",
+            "Reach a 7-day focus streak",
+            lambda u, c: u.current_streak >= 7,
+        ),
+        Achievement(
+            "task_master",
+            "Task Master",
+            "Complete 5 tasks",
+            lambda u, c: u.completed_tasks >= 5,
+        ),
+        Achievement(
+            "level_5",
+            "Focused Mind",
+            "Reach level 5",
+            lambda u, c: level_for_xp(u.xp) >= 5,
+        ),
+    ]
+}
 
 
-def unlock_achievements(user: User, ctx: AchievementContext) -> list[AchievementResponse]:
-    """Unlock every achievement whose condition is now satisfied."""
+def unlock_achievements(
+    db: Session, user: User, ctx: AchievementContext
+) -> list[AchievementResponse]:
+    """Unlock every achievement whose condition is now satisfied and stage DB rows."""
+    existing_codes = set(
+        db.scalars(select(UserAchievement.code).where(UserAchievement.user_id == user.id))
+    )
     unlocked: list[AchievementResponse] = []
     for ach in ACHIEVEMENTS.values():
-        if ach.code in user.achievements:
+        if ach.code in existing_codes:
             continue
         if ach.check(user, ctx):
             now = utcnow()
-            user.achievements[ach.code] = now
-            unlocked.append(AchievementResponse(code=ach.code, title=ach.title,
-                                                description=ach.description,
-                                                unlocked=True, unlocked_at=now))
+            db.add(
+                UserAchievement(
+                    user_id=user.id,
+                    code=ach.code,
+                    session_id=ctx.session.id if ctx.session else None,
+                    unlocked_at=now,
+                )
+            )
+            existing_codes.add(ach.code)
+            unlocked.append(
+                AchievementResponse(
+                    code=ach.code,
+                    title=ach.title,
+                    description=ach.description,
+                    unlocked=True,
+                    unlocked_at=now,
+                )
+            )
     return unlocked
 
 
-def list_achievements(user: User) -> list[AchievementResponse]:
+def list_achievements(db: Session, user: User) -> list[AchievementResponse]:
+    unlocked_map = {
+        ua.code: ua.unlocked_at
+        for ua in db.scalars(select(UserAchievement).where(UserAchievement.user_id == user.id))
+    }
     return [
         AchievementResponse(
-            code=a.code, title=a.title, description=a.description,
-            unlocked=a.code in user.achievements,
-            unlocked_at=user.achievements.get(a.code),
+            code=a.code,
+            title=a.title,
+            description=a.description,
+            unlocked=a.code in unlocked_map,
+            unlocked_at=unlocked_map.get(a.code),
         )
         for a in ACHIEVEMENTS.values()
     ]
@@ -147,17 +222,21 @@ def update_streak(user: User, today: Optional[date] = None) -> None:
     user.longest_streak = max(user.longest_streak, user.current_streak)
 
 
-def reward_session(user: User, session: FocusSession,
-                   focusing_room_mates: int) -> tuple[dict[str, int], list[AchievementResponse]]:
+def reward_session(
+    db: Session,
+    user: User,
+    session: FocusSession,
+    focusing_room_mates: int,
+) -> tuple[dict[str, int], list[AchievementResponse]]:
     """Apply XP/streak/achievement updates for a finished (completed/ended early) session.
 
     Returns the XP breakdown and newly unlocked achievements.
     """
-    minutes = int(session.focused_seconds / settings.seconds_per_minute)  # timer minutes
+    minutes = int(session.focused_seconds / settings.seconds_per_minute)
     breakdown: dict[str, int] = {}
 
     if session.status == SessionStatus.COMPLETED:
-        minutes = session.focus_minutes  # full planned time
+        minutes = session.focus_minutes
         breakdown["focus_minutes"] = minutes * settings.xp_per_focus_minute
         breakdown["completion_bonus"] = settings.xp_full_completion_bonus
         if session.pause_count == 0:
@@ -177,15 +256,14 @@ def reward_session(user: User, session: FocusSession,
     user.xp += total
     session.xp_earned = total
 
-    new = unlock_achievements(user, AchievementContext(session, focusing_room_mates))
-    session.unlocked_achievements = [a.code for a in new]
+    new = unlock_achievements(db, user, AchievementContext(session, focusing_room_mates))
     return breakdown, new
 
 
-def reward_task_completion(user: User) -> list[AchievementResponse]:
+def reward_task_completion(db: Session, user: User) -> list[AchievementResponse]:
     user.completed_tasks += 1
     user.xp += settings.xp_task_completed
-    return unlock_achievements(user, AchievementContext())
+    return unlock_achievements(db, user, AchievementContext())
 
 
 # --------------------------------------------------------------------------- #
@@ -199,17 +277,25 @@ _METRIC_GETTERS: dict[LeaderboardMetric, Callable[[User], int]] = {
 }
 
 
-def build_leaderboard(users: Iterable[User], metric: LeaderboardMetric,
-                      limit: int) -> list[LeaderboardEntry]:
+def build_leaderboard(
+    users: Iterable[User], metric: LeaderboardMetric, limit: int
+) -> list[LeaderboardEntry]:
     getter = _METRIC_GETTERS[metric]
     ranked = sorted(users, key=lambda u: (-getter(u), -u.xp, u.id))[:limit]
     entries: list[LeaderboardEntry] = []
     prev_value, prev_rank = None, 0
     for idx, user in enumerate(ranked, start=1):
         value = getter(user)
-        rank = prev_rank if value == prev_value else idx   # ties share a rank
-        entries.append(LeaderboardEntry(rank=rank, user_id=user.id, username=user.username,
-                                        display_name=user.display_name,
-                                        level=level_for_xp(user.xp), value=value))
+        rank = prev_rank if value == prev_value else idx
+        entries.append(
+            LeaderboardEntry(
+                rank=rank,
+                user_id=user.id,
+                username=user.username,
+                display_name=user.display_name,
+                level=level_for_xp(user.xp),
+                value=value,
+            )
+        )
         prev_value, prev_rank = value, rank
     return entries
