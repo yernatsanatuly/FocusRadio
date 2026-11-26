@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "FocusRadio API"
-    version: str = "2.0.0"
+    version: str = "3.0.0"
 
     database_url: str = Field(
         default="postgresql+psycopg://focusradio:focusradio@localhost:5433/focusradio",
@@ -24,6 +24,22 @@ class Settings(BaseSettings):
     sql_echo: bool = Field(
         default=False,
         validation_alias=AliasChoices("SQL_ECHO", "sql_echo"),
+    )
+
+    jwt_secret_key: str = Field(
+        default="focusradio-dev-secret-key-change-in-production-32bytes",
+        validation_alias=AliasChoices("JWT_SECRET_KEY", "jwt_secret_key"),
+    )
+    jwt_algorithm: str = Field(
+        default="HS256",
+        validation_alias=AliasChoices("JWT_ALGORITHM", "jwt_algorithm"),
+    )
+    access_token_expire_minutes: int = Field(
+        default=60,
+        ge=1,
+        validation_alias=AliasChoices(
+            "ACCESS_TOKEN_EXPIRE_MINUTES", "access_token_expire_minutes"
+        ),
     )
 
     seconds_per_minute: float = Field(

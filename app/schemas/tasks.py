@@ -11,13 +11,12 @@ class TaskCreate(BaseModel):
     model_config = ConfigDict(
         str_strip_whitespace=True,
         json_schema_extra={"example": {
-            "user_id": 1, "title": "Finish FastAPI assignment",
+            "title": "Finish FastAPI assignment",
             "description": "Routers, schemas, services", "priority": "high",
             "estimated_pomodoros": 4,
         }},
     )
 
-    user_id: int = Field(ge=1)
     title: str = Field(min_length=1, max_length=120)
     description: Optional[str] = Field(default=None, max_length=500)
     priority: TaskPriority = TaskPriority.MEDIUM

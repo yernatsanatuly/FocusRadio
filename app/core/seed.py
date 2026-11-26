@@ -3,8 +3,12 @@ from __future__ import annotations
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.security import hash_password
 from app.models import Room, RoomMember, Track, User
-from app.models.enums import Genre, Mood
+from app.models.enums import Genre, Mood, UserRole
+
+DEMO_PASSWORD = "password123"
+UNUSABLE_PASSWORD_MARKER = "!unusable!"
 
 _DEMO_TRACKS = [
     ("Rainy Library", "LoFi Owl", Genre.LOFI, Mood.FOCUS, 3, 184, 72),
@@ -20,16 +24,43 @@ _DEMO_TRACKS = [
 ]
 
 _DEMO_USERS = [
-    ("alice", "Alice", "alice@focusradio.dev"),
-    ("bob", "Bob", "bob@focusradio.dev"),
-    ("carol", "Carol", "carol@focusradio.dev"),
+    ("alice", "Alice", "alice@focusradio.dev", UserRole.ADMIN),
+    ("bob", "Bob", "bob@focusradio.dev", UserRole.USER),
+    ("carol", "Carol", "carol@focusradio.dev", UserRole.USER),
 ]
+
+_CACHED_DEMO_PASSWORD_HASH: str | None = None
+
+
+def _demo_password_hash() -> str:
+    global _CACHED_DEMO_PASSWORD_HASH
+    if _CACHED_DEMO_PASSWORD_HASH is None:
+        _CACHED_DEMO_PASSWORD_HASH = hash_password(DEMO_PASSWORD)
+    return _CACHED_DEMO_PASSWORD_HASH
 
 
 def seed_demo_data(db: Session) -> None:
     has_tracks = (db.scalar(select(func.count(Track.id))) or 0) > 0
     has_users = (db.scalar(select(func.count(User.id))) or 0) > 0
     has_rooms = (db.scalar(select(func.count(Room.id))) or 0) > 0
+
+    # Backfill demo users migrated from pre-auth schema if they have placeholder passwords.
+    if has_users:
+        demo_roles = {username: role for username, _, _, role in _DEMO_USERS}
+        unmigrated_demos = list(
+            db.scalars(
+                select(User).where(
+                    User.username.in_(demo_roles.keys()),
+                    User.hashed_password == UNUSABLE_PASSWORD_MARKER,
+                )
+            ).all()
+        )
+        if unmigrated_demos:
+            pwd_hash = _demo_password_hash()
+            for demo_user in unmigrated_demos:
+                demo_user.hashed_password = pwd_hash
+                demo_user.role = demo_roles[demo_user.username]
+            db.commit()
 
     if has_tracks and has_users and has_rooms:
         return
@@ -56,9 +87,16 @@ def seed_demo_data(db: Session) -> None:
 
     alice: User | None = None
     if not has_users:
+        pwd_hash = _demo_password_hash()
         users = [
-            User(username=username, display_name=name, email=email)
-            for username, name, email in _DEMO_USERS
+            User(
+                username=username,
+                display_name=name,
+                email=email,
+                hashed_password=pwd_hash,
+                role=role,
+            )
+            for username, name, email, role in _DEMO_USERS
         ]
         db.add_all(users)
         db.flush()

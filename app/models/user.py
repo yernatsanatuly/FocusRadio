@@ -15,7 +15,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, utcnow
+from app.models.base import Base, pg_enum, utcnow
+from app.models.enums import UserRole
 
 if TYPE_CHECKING:
     from app.models.room import Room, RoomMember
@@ -38,6 +39,14 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(30), nullable=False, unique=True, index=True)
     display_name: Mapped[str] = mapped_column(String(50), nullable=False)
     email: Mapped[str] = mapped_column(String(120), nullable=False, unique=True, index=True)
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[UserRole] = mapped_column(
+        pg_enum(UserRole, "user_role_enum"),
+        nullable=False,
+        default=UserRole.USER,
+        server_default=UserRole.USER.value,
+        index=True,
+    )
     bio: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
 
     xp: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
@@ -88,6 +97,10 @@ class User(Base):
     @property
     def current_room_id(self) -> Optional[int]:
         return self.room_membership.room_id if self.room_membership else None
+
+    @property
+    def is_admin(self) -> bool:
+        return self.role == UserRole.ADMIN
 
 
 class UserAchievement(Base):

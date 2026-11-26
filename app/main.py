@@ -8,7 +8,7 @@ from app.config import settings
 from app.core.database import SessionLocal
 from app.core.exceptions import register_exception_handlers
 from app.core.seed import seed_demo_data
-from app.routers import leaderboard, rooms, sessions, tasks, tracks, users
+from app.routers import auth, leaderboard, rooms, sessions, tasks, tracks, users
 
 
 @asynccontextmanager
@@ -43,6 +43,7 @@ app.add_middleware(
 
 register_exception_handlers(app)
 
+app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(rooms.router)
 app.include_router(sessions.router)

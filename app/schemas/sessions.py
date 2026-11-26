@@ -11,12 +11,11 @@ class SessionCreate(BaseModel):
     model_config = ConfigDict(
         str_strip_whitespace=True,
         json_schema_extra={"examples": [
-            {"user_id": 1, "mode": "pomodoro", "task_id": None, "notes": "Chapter 3"},
-            {"user_id": 2, "mode": "custom", "focus_minutes": 2, "break_minutes": 1},
+            {"mode": "pomodoro", "task_id": None, "notes": "Chapter 3"},
+            {"mode": "custom", "focus_minutes": 2, "break_minutes": 1},
         ]},
     )
 
-    user_id: int = Field(ge=1)
     mode: SessionMode = SessionMode.POMODORO
     focus_minutes: Optional[int] = Field(default=None, ge=1, le=180,
                                          description="Only for mode=custom")

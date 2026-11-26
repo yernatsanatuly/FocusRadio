@@ -69,23 +69,12 @@ def find_active_session(db: Session, user_id: int) -> Optional[FocusSession]:
     )
 
 
-def ensure_actor_exists(db: Session, acting_user_id: int) -> User:
-    """The X-User-Id header must reference an existing user."""
-    user = db.get(User, acting_user_id)
-    if user is None:
+def ensure_owner_or_admin(actor: User, owner_id: int, what: str) -> None:
+    if actor.id != owner_id and not actor.is_admin:
         raise ForbiddenError(
-            f"Acting user id={acting_user_id} does not exist",
-            code="UNKNOWN_ACTING_USER",
-        )
-    return user
-
-
-def ensure_same_user(acting_user_id: int, owner_id: int, what: str) -> None:
-    if acting_user_id != owner_id:
-        raise ForbiddenError(
-            f"Only the owner can modify this {what}",
+            f"Only the owner or an administrator can access this {what}",
             code="NOT_RESOURCE_OWNER",
-            details={"owner_id": owner_id, "acting_user_id": acting_user_id},
+            details={"owner_id": owner_id, "acting_user_id": actor.id},
         )
 
 

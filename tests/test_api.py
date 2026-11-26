@@ -13,7 +13,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.config import settings
 from app.core.database import get_db
-from app.core.seed import seed_demo_data
+from app.core.seed import DEMO_PASSWORD, seed_demo_data
 from app.main import app
 from app.models import FocusSession, Room, RoomMember, Task, Track, User, UserAchievement
 
@@ -85,6 +85,16 @@ class TestFocusRadioAPI(unittest.TestCase):
             db.commit()
             seed_demo_data(db)
 
+        self.alice_headers = self._login("alice")  # admin, id=1
+        self.bob_headers = self._login("bob")      # user, id=2
+        self.carol_headers = self._login("carol")  # user, id=3
+
+    def _login(self, username: str, password: str = DEMO_PASSWORD) -> dict[str, str]:
+        res = self.client.post("/auth/login", json={"username": username, "password": password})
+        self.assertEqual(res.status_code, 200, res.text)
+        token = res.json()["access_token"]
+        return {"Authorization": f"Bearer {token}"}
+
     def test_root_and_docs(self):
         res = self.client.get("/")
         self.assertEqual(res.status_code, 200)
@@ -102,32 +112,44 @@ class TestFocusRadioAPI(unittest.TestCase):
             "username": "diana_dev",
             "display_name": "Diana",
             "email": "diana@test.com",
+            "password": "StrongPassword123!",
             "bio": "Pythonista",
         }
-        res = self.client.post("/users", json=payload)
+        res = self.client.post("/auth/register", json=payload)
         self.assertEqual(res.status_code, 201)
         data = res.json()
         self.assertEqual(data["username"], "diana_dev")
+        self.assertEqual(data["role"], "user")
         self.assertEqual(data["level"], 1)
+        self.assertNotIn("password", data)
+        self.assertNotIn("hashed_password", data)
         user_id = data["id"]
 
-        dup_res = self.client.post("/users", json=payload)
+        diana_headers = self._login("diana_dev", "StrongPassword123!")
+
+        dup_res = self.client.post("/auth/register", json=payload)
         self.assertEqual(dup_res.status_code, 409)
         self.assertEqual(dup_res.json()["error"]["code"], "USERNAME_TAKEN")
 
         dup_email = self.client.post(
-            "/users",
-            json={"username": "diana_2", "display_name": "Diana 2", "email": "DIANA@test.com"},
+            "/auth/register",
+            json={
+                "username": "diana_2",
+                "display_name": "Diana 2",
+                "email": "DIANA@test.com",
+                "password": "StrongPassword123!",
+            },
         )
         self.assertEqual(dup_email.status_code, 409)
         self.assertEqual(dup_email.json()["error"]["code"], "EMAIL_TAKEN")
 
         bad_res = self.client.post(
-            "/users",
+            "/auth/register",
             json={
                 "username": "bad_user",
                 "display_name": "Bad",
                 "email": "not-an-email",
+                "password": "StrongPassword123!",
             },
         )
         self.assertEqual(bad_res.status_code, 422)
@@ -135,29 +157,30 @@ class TestFocusRadioAPI(unittest.TestCase):
 
         update_res = self.client.patch(
             f"/users/{user_id}",
-            headers={"X-User-Id": str(user_id)},
+            headers=diana_headers,
             json={"display_name": "Diana K.", "bio": "Focusing every day"},
         )
         self.assertEqual(update_res.status_code, 200)
         self.assertEqual(update_res.json()["display_name"], "Diana K.")
 
+        # Regular user Bob cannot modify Diana's profile
         forbidden = self.client.patch(
             f"/users/{user_id}",
-            headers={"X-User-Id": "1"},
+            headers=self.bob_headers,
             json={"display_name": "Hacked"},
         )
         self.assertEqual(forbidden.status_code, 403)
         self.assertEqual(forbidden.json()["error"]["code"], "NOT_RESOURCE_OWNER")
 
-        not_found = self.client.get("/users/9999")
+        not_found = self.client.get("/users/9999", headers=diana_headers)
         self.assertEqual(not_found.status_code, 404)
 
-        listed = self.client.get("/users?search=diana&sort_by=username")
+        listed = self.client.get("/users?search=diana&sort_by=username", headers=diana_headers)
         self.assertEqual(listed.status_code, 200)
         self.assertEqual(listed.json()["total"], 1)
         self.assertEqual(listed.json()["items"][0]["id"], user_id)
 
-        stats_res = self.client.get(f"/users/{user_id}/stats")
+        stats_res = self.client.get(f"/users/{user_id}/stats", headers=diana_headers)
         self.assertEqual(stats_res.status_code, 200)
         self.assertEqual(stats_res.json()["total_focus_minutes"], 0)
 
@@ -165,17 +188,17 @@ class TestFocusRadioAPI(unittest.TestCase):
         room_payload = {
             "name": "Midnight Hackers",
             "description": "Deep synthwave coding",
-            "owner_id": 2,
             "capacity": 3,
             "is_private": True,
             "access_code": "code2026",
             "preferred_genre": "synthwave",
             "tags": ["coding", "synthwave"],
         }
-        res = self.client.post("/rooms", json=room_payload)
+        res = self.client.post("/rooms", headers=self.bob_headers, json=room_payload)
         self.assertEqual(res.status_code, 201)
         room = res.json()
         room_id = room["id"]
+        self.assertEqual(room["owner_id"], 2)
         self.assertEqual(room["member_count"], 1)
         self.assertEqual(room["available_spots"], 2)
 
@@ -186,31 +209,37 @@ class TestFocusRadioAPI(unittest.TestCase):
         self.assertEqual(filtered.json()["items"][0]["id"], room_id)
 
         bad_join = self.client.post(
-            f"/rooms/{room_id}/members", json={"user_id": 3, "access_code": "wrong"}
+            f"/rooms/{room_id}/members",
+            headers=self.carol_headers,
+            json={"access_code": "wrong"},
         )
         self.assertEqual(bad_join.status_code, 403)
         self.assertEqual(bad_join.json()["error"]["code"], "INVALID_ACCESS_CODE")
 
         join_res = self.client.post(
-            f"/rooms/{room_id}/members", json={"user_id": 3, "access_code": "code2026"}
+            f"/rooms/{room_id}/members",
+            headers=self.carol_headers,
+            json={"access_code": "code2026"},
         )
         self.assertEqual(join_res.status_code, 201)
         self.assertEqual(join_res.json()["member_count"], 2)
 
         track_res = self.client.put(
             f"/rooms/{room_id}/track",
-            headers={"X-User-Id": "3"},
+            headers=self.carol_headers,
             json={"track_id": 9},
         )
         self.assertEqual(track_res.status_code, 200)
         self.assertEqual(track_res.json()["current_track"]["title"], "Neon Sprint")
 
+        # Non-member cannot change room music
         alice_track = self.client.put(
             f"/rooms/{room_id}/track",
-            headers={"X-User-Id": "1"},
+            headers=self.alice_headers,
             json={"track_id": 2},
         )
         self.assertEqual(alice_track.status_code, 403)
+        self.assertEqual(alice_track.json()["error"]["code"], "NOT_A_MEMBER")
 
         recom = self.client.get(f"/rooms/{room_id}/recommended-tracks")
         self.assertEqual(recom.status_code, 200)
@@ -218,18 +247,22 @@ class TestFocusRadioAPI(unittest.TestCase):
         self.assertTrue(len(recom.json()["tracks"]) > 0)
 
         # Start focus session for Bob -> 1/2 focusing -> room switches to focus phase
-        sess_res = self.client.post("/sessions", json={"user_id": 2, "mode": "pomodoro"})
+        sess_res = self.client.post(
+            "/sessions",
+            headers=self.bob_headers,
+            json={"mode": "pomodoro"},
+        )
         self.assertEqual(sess_res.status_code, 201)
         recom_focus = self.client.get(f"/rooms/{room_id}/recommended-tracks")
         self.assertEqual(recom_focus.status_code, 200)
         self.assertEqual(recom_focus.json()["room_phase"], "focus")
-        self.client.post(f"/sessions/{sess_res.json()['id']}/cancel", headers={"X-User-Id": "2"})
+        self.client.post(f"/sessions/{sess_res.json()['id']}/cancel", headers=self.bob_headers)
 
-        leave_res = self.client.delete(f"/rooms/{room_id}/members/2", headers={"X-User-Id": "2"})
+        leave_res = self.client.delete(f"/rooms/{room_id}/members/2", headers=self.bob_headers)
         self.assertEqual(leave_res.status_code, 200)
         self.assertEqual(leave_res.json()["new_owner_id"], 3)
 
-        leave_last = self.client.delete(f"/rooms/{room_id}/members/3", headers={"X-User-Id": "3"})
+        leave_last = self.client.delete(f"/rooms/{room_id}/members/3", headers=self.carol_headers)
         self.assertEqual(leave_last.status_code, 200)
         self.assertTrue(leave_last.json()["room_deleted"])
 
@@ -239,8 +272,8 @@ class TestFocusRadioAPI(unittest.TestCase):
     def test_focus_session_and_task_integration(self):
         task_res = self.client.post(
             "/tasks",
+            headers=self.alice_headers,
             json={
-                "user_id": 1,
                 "title": "Build FastAPI Architecture",
                 "description": "Entities, services, routers",
                 "priority": "high",
@@ -252,8 +285,8 @@ class TestFocusRadioAPI(unittest.TestCase):
 
         session_res = self.client.post(
             "/sessions",
+            headers=self.alice_headers,
             json={
-                "user_id": 1,
                 "mode": "custom",
                 "focus_minutes": 1,
                 "break_minutes": 1,
@@ -269,25 +302,35 @@ class TestFocusRadioAPI(unittest.TestCase):
         self.assertEqual(session["room_id"], 1)  # Alice is in seeded room 1
 
         # Task auto-transitioned from todo -> in_progress
-        task_after_start = self.client.get(f"/tasks/{task_id}").json()
+        task_after_start = self.client.get(
+            f"/tasks/{task_id}", headers=self.alice_headers
+        ).json()
         self.assertEqual(task_after_start["status"], "in_progress")
 
-        conflict_res = self.client.post("/sessions", json={"user_id": 1, "mode": "pomodoro"})
+        conflict_res = self.client.post(
+            "/sessions",
+            headers=self.alice_headers,
+            json={"mode": "pomodoro"},
+        )
         self.assertEqual(conflict_res.status_code, 409)
         self.assertEqual(conflict_res.json()["error"]["code"], "SESSION_ALREADY_RUNNING")
 
-        pause_res = self.client.post(f"/sessions/{session_id}/pause", headers={"X-User-Id": "1"})
+        pause_res = self.client.post(
+            f"/sessions/{session_id}/pause", headers=self.alice_headers
+        )
         self.assertEqual(pause_res.status_code, 200)
         self.assertEqual(pause_res.json()["status"], "paused")
         self.assertEqual(pause_res.json()["pause_count"], 1)
 
-        resume_res = self.client.post(f"/sessions/{session_id}/resume", headers={"X-User-Id": "1"})
+        resume_res = self.client.post(
+            f"/sessions/{session_id}/resume", headers=self.alice_headers
+        )
         self.assertEqual(resume_res.status_code, 200)
         self.assertEqual(resume_res.json()["status"], "active")
 
         finish_res = self.client.post(
             f"/sessions/{session_id}/complete?force=true",
-            headers={"X-User-Id": "1"},
+            headers=self.alice_headers,
         )
         self.assertEqual(finish_res.status_code, 200)
         finish_data = finish_res.json()
@@ -296,13 +339,13 @@ class TestFocusRadioAPI(unittest.TestCase):
 
         dup_complete = self.client.post(
             f"/sessions/{session_id}/complete",
-            headers={"X-User-Id": "1"},
+            headers=self.alice_headers,
         )
         self.assertEqual(dup_complete.status_code, 409)
 
         task_done = self.client.patch(
             f"/tasks/{task_id}",
-            headers={"X-User-Id": "1"},
+            headers=self.alice_headers,
             json={"status": "done"},
         )
         self.assertEqual(task_done.status_code, 200)
@@ -312,14 +355,15 @@ class TestFocusRadioAPI(unittest.TestCase):
     def test_full_completion_xp_streak_and_leaderboard(self):
         task_res = self.client.post(
             "/tasks",
-            json={"user_id": 2, "title": "PostgreSQL Migration", "estimated_pomodoros": 2},
+            headers=self.bob_headers,
+            json={"title": "PostgreSQL Migration", "estimated_pomodoros": 2},
         )
         task_id = task_res.json()["id"]
 
         res = self.client.post(
             "/sessions",
+            headers=self.bob_headers,
             json={
-                "user_id": 2,
                 "mode": "custom",
                 "focus_minutes": 1,
                 "break_minutes": 1,
@@ -333,7 +377,7 @@ class TestFocusRadioAPI(unittest.TestCase):
 
         finish_res = self.client.post(
             f"/sessions/{session_id}/complete",
-            headers={"X-User-Id": "2"},
+            headers=self.bob_headers,
         )
         self.assertEqual(finish_res.status_code, 200)
         data = finish_res.json()
@@ -343,11 +387,13 @@ class TestFocusRadioAPI(unittest.TestCase):
         self.assertIn("no_pause_bonus", data["xp_breakdown"])
 
         # Linked task received +1 completed pomodoro
-        task_state = self.client.get(f"/tasks/{task_id}").json()
+        task_state = self.client.get(f"/tasks/{task_id}", headers=self.bob_headers).json()
         self.assertEqual(task_state["completed_pomodoros"], 1)
         self.assertEqual(task_state["progress_percent"], 50.0)
 
-        ach_res = self.client.get("/users/2/achievements?unlocked_only=true")
+        ach_res = self.client.get(
+            "/users/2/achievements?unlocked_only=true", headers=self.bob_headers
+        )
         self.assertEqual(ach_res.status_code, 200)
         codes = [a["code"] for a in ach_res.json()]
         self.assertIn("first_tune_in", codes)
@@ -360,26 +406,30 @@ class TestFocusRadioAPI(unittest.TestCase):
 
     def test_persistence_across_database_sessions(self):
         user_res = self.client.post(
-            "/users",
+            "/auth/register",
             json={
                 "username": "persistent_user",
                 "display_name": "Persistent",
                 "email": "persist@focusradio.dev",
+                "password": "PersistPassword123!",
             },
         )
         self.assertEqual(user_res.status_code, 201)
         uid = user_res.json()["id"]
+        headers = self._login("persistent_user", "PersistPassword123!")
 
         room_res = self.client.post(
             "/rooms",
-            json={"name": "Persistent Room", "owner_id": uid, "capacity": 4, "tags": ["db"]},
+            headers=headers,
+            json={"name": "Persistent Room", "capacity": 4, "tags": ["db"]},
         )
         self.assertEqual(room_res.status_code, 201)
         rid = room_res.json()["id"]
 
         task_res = self.client.post(
             "/tasks",
-            json={"user_id": uid, "title": "Verify Postgres", "estimated_pomodoros": 1},
+            headers=headers,
+            json={"title": "Verify Postgres", "estimated_pomodoros": 1},
         )
         self.assertEqual(task_res.status_code, 201)
         tid = task_res.json()["id"]
@@ -388,6 +438,8 @@ class TestFocusRadioAPI(unittest.TestCase):
         with self.SessionLocal() as fresh_db:
             user = fresh_db.get(User, uid)
             self.assertIsNotNone(user)
+            self.assertNotEqual(user.hashed_password, "PersistPassword123!")
+            self.assertTrue(user.hashed_password.startswith("$2"))
             self.assertEqual(user.current_room_id, rid)
 
             room = fresh_db.get(Room, rid)
@@ -405,48 +457,58 @@ class TestFocusRadioAPI(unittest.TestCase):
             self.assertEqual(task.user_id, uid)
 
     def test_relationships_and_cascade_integrity(self):
-        # 1. Track deletion protection & force=true sets room.current_track_id = NULL
-        conflict_track = self.client.delete("/tracks/1")
+        # 1. Track deletion protection (admin) & force=true sets room.current_track_id = NULL
+        conflict_track = self.client.delete("/tracks/1", headers=self.alice_headers)
         self.assertEqual(conflict_track.status_code, 409)
         self.assertEqual(conflict_track.json()["error"]["code"], "TRACK_IN_USE")
 
-        force_track = self.client.delete("/tracks/1?force=true")
+        force_track = self.client.delete("/tracks/1?force=true", headers=self.alice_headers)
         self.assertEqual(force_track.status_code, 204)
         room1 = self.client.get("/rooms/1").json()
         self.assertIsNone(room1["current_track"])
 
         # 2. Task deletion blocked while in active session, then SET NULL after cancel
         task_id = self.client.post(
-            "/tasks", json={"user_id": 1, "title": "Active Linked Task"}
+            "/tasks",
+            headers=self.alice_headers,
+            json={"title": "Active Linked Task"},
         ).json()["id"]
         sess_id = self.client.post(
             "/sessions",
-            json={"user_id": 1, "mode": "pomodoro", "task_id": task_id},
+            headers=self.alice_headers,
+            json={"mode": "pomodoro", "task_id": task_id},
         ).json()["id"]
 
-        blocked_del = self.client.delete(f"/tasks/{task_id}", headers={"X-User-Id": "1"})
+        blocked_del = self.client.delete(f"/tasks/{task_id}", headers=self.alice_headers)
         self.assertEqual(blocked_del.status_code, 409)
         self.assertEqual(blocked_del.json()["error"]["code"], "TASK_IN_ACTIVE_SESSION")
 
-        self.client.post(f"/sessions/{sess_id}/cancel", headers={"X-User-Id": "1"})
-        ok_del = self.client.delete(f"/tasks/{task_id}", headers={"X-User-Id": "1"})
+        self.client.post(f"/sessions/{sess_id}/cancel", headers=self.alice_headers)
+        ok_del = self.client.delete(f"/tasks/{task_id}", headers=self.alice_headers)
         self.assertEqual(ok_del.status_code, 204)
-        self.assertIsNone(self.client.get(f"/sessions/{sess_id}").json()["task_id"])
+        self.assertIsNone(
+            self.client.get(f"/sessions/{sess_id}", headers=self.alice_headers).json()["task_id"]
+        )
 
         # 3. Deleting room preserves session history with room_id = NULL
-        self.assertEqual(self.client.get(f"/sessions/{sess_id}").json()["room_id"], 1)
+        self.assertEqual(
+            self.client.get(f"/sessions/{sess_id}", headers=self.alice_headers).json()["room_id"],
+            1,
+        )
         # Bob joins room 1, then Alice deletes her account -> ownership transfers to Bob & Alice's data cascades
-        self.client.post("/rooms/1/members", json={"user_id": 2})
-        self.client.post("/tasks", json={"user_id": 1, "title": "Will Cascade"})
+        self.client.post("/rooms/1/members", headers=self.bob_headers)
+        self.client.post("/tasks", headers=self.alice_headers, json={"title": "Will Cascade"})
         alice_active = self.client.post(
-            "/sessions", json={"user_id": 1, "mode": "pomodoro"}
+            "/sessions",
+            headers=self.alice_headers,
+            json={"mode": "pomodoro"},
         ).json()["id"]
         self.assertIsNotNone(alice_active)
 
-        del_alice = self.client.delete("/users/1", headers={"X-User-Id": "1"})
+        del_alice = self.client.delete("/users/1", headers=self.alice_headers)
         self.assertEqual(del_alice.status_code, 204)
 
-        self.assertEqual(self.client.get("/users/1").status_code, 404)
+        self.assertEqual(self.client.get("/users/1", headers=self.bob_headers).status_code, 404)
         room1_after = self.client.get("/rooms/1").json()
         self.assertEqual(room1_after["owner_id"], 2)
         self.assertEqual(room1_after["member_count"], 1)
@@ -467,31 +529,39 @@ class TestFocusRadioAPI(unittest.TestCase):
 
         # 4. Closing room directly sets remaining session.room_id = NULL
         bob_sess_id = self.client.post(
-            "/sessions", json={"user_id": 2, "mode": "pomodoro"}
+            "/sessions",
+            headers=self.bob_headers,
+            json={"mode": "pomodoro"},
         ).json()["id"]
-        self.assertEqual(self.client.get(f"/sessions/{bob_sess_id}").json()["room_id"], 1)
-        del_room = self.client.delete("/rooms/1", headers={"X-User-Id": "2"})
+        self.assertEqual(
+            self.client.get(f"/sessions/{bob_sess_id}", headers=self.bob_headers).json()["room_id"],
+            1,
+        )
+        del_room = self.client.delete("/rooms/1", headers=self.bob_headers)
         self.assertEqual(del_room.status_code, 204)
-        self.assertIsNone(self.client.get(f"/sessions/{bob_sess_id}").json()["room_id"])
+        self.assertIsNone(
+            self.client.get(f"/sessions/{bob_sess_id}", headers=self.bob_headers).json()["room_id"]
+        )
 
     def test_invalid_relationships_and_business_rules(self):
-        # Missing owner FK -> 404
-        res = self.client.post("/rooms", json={"name": "Ghost Room", "owner_id": 9999})
-        self.assertEqual(res.status_code, 404)
-
         # Using someone else's task in a session -> 403
         alice_task_id = self.client.post(
-            "/tasks", json={"user_id": 1, "title": "Alice Private Task"}
+            "/tasks",
+            headers=self.alice_headers,
+            json={"title": "Alice Private Task"},
         ).json()["id"]
         forbidden_sess = self.client.post(
-            "/sessions", json={"user_id": 2, "mode": "pomodoro", "task_id": alice_task_id}
+            "/sessions",
+            headers=self.bob_headers,
+            json={"mode": "pomodoro", "task_id": alice_task_id},
         )
         self.assertEqual(forbidden_sess.status_code, 403)
         self.assertEqual(forbidden_sess.json()["error"]["code"], "TASK_NOT_OWNED")
 
-        # Duplicate track (case-insensitive) -> 409
+        # Duplicate track (case-insensitive) by admin -> 409
         dup_track = self.client.post(
             "/tracks",
+            headers=self.alice_headers,
             json={
                 "title": "rainy library",
                 "artist": "LOFI OWL",
@@ -505,22 +575,26 @@ class TestFocusRadioAPI(unittest.TestCase):
         self.assertEqual(dup_track.json()["error"]["code"], "TRACK_ALREADY_EXISTS")
 
         # Pause limit (max 3) -> 422
-        sid = self.client.post("/sessions", json={"user_id": 3, "mode": "pomodoro"}).json()["id"]
+        sid = self.client.post(
+            "/sessions",
+            headers=self.carol_headers,
+            json={"mode": "pomodoro"},
+        ).json()["id"]
         for _ in range(3):
             self.assertEqual(
-                self.client.post(f"/sessions/{sid}/pause", headers={"X-User-Id": "3"}).status_code,
+                self.client.post(f"/sessions/{sid}/pause", headers=self.carol_headers).status_code,
                 200,
             )
             self.assertEqual(
-                self.client.post(f"/sessions/{sid}/resume", headers={"X-User-Id": "3"}).status_code,
+                self.client.post(f"/sessions/{sid}/resume", headers=self.carol_headers).status_code,
                 200,
             )
-        fourth_pause = self.client.post(f"/sessions/{sid}/pause", headers={"X-User-Id": "3"})
+        fourth_pause = self.client.post(f"/sessions/{sid}/pause", headers=self.carol_headers)
         self.assertEqual(fourth_pause.status_code, 422)
         self.assertEqual(fourth_pause.json()["error"]["code"], "PAUSE_LIMIT_REACHED")
 
         # Completing before planned time without force -> 409
-        early = self.client.post(f"/sessions/{sid}/complete", headers={"X-User-Id": "3"})
+        early = self.client.post(f"/sessions/{sid}/complete", headers=self.carol_headers)
         self.assertEqual(early.status_code, 409)
         self.assertEqual(early.json()["error"]["code"], "FOCUS_TIME_NOT_REACHED")
 

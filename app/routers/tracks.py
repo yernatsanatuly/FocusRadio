@@ -2,7 +2,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query, status
 
-from app.core.dependencies import Limit, Offset, Tracks
+from app.core.dependencies import AdminUser, Limit, Offset, Tracks
 from app.models.enums import Genre, Mood
 from app.schemas.common import Page, error_responses
 from app.schemas.tracks import TrackCreate, TrackResponse, TrackUpdate
@@ -10,9 +10,14 @@ from app.schemas.tracks import TrackCreate, TrackResponse, TrackUpdate
 router = APIRouter(prefix="/tracks", tags=["Tracks"])
 
 
-@router.post("", response_model=TrackResponse, status_code=status.HTTP_201_CREATED,
-             responses=error_responses(409, 422), summary="Add track to catalogue")
-def create_track(data: TrackCreate, service: Tracks):
+@router.post(
+    "",
+    response_model=TrackResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses=error_responses(401, 403, 409, 422),
+    summary="Add track to catalogue (admin only)",
+)
+def create_track(data: TrackCreate, _admin: AdminUser, service: Tracks):
     return service.create(data)
 
 
@@ -27,23 +32,42 @@ def list_tracks(
     limit: Limit = 20,
     offset: Offset = 0,
 ):
-    return service.list(genre=genre, mood=mood, min_energy=min_energy,
-                        max_energy=max_energy, search=search, limit=limit, offset=offset)
+    return service.list(
+        genre=genre,
+        mood=mood,
+        min_energy=min_energy,
+        max_energy=max_energy,
+        search=search,
+        limit=limit,
+        offset=offset,
+    )
 
 
-@router.get("/{track_id}", response_model=TrackResponse, responses=error_responses(404),
-            summary="Get track details")
+@router.get(
+    "/{track_id}",
+    response_model=TrackResponse,
+    responses=error_responses(404),
+    summary="Get track details",
+)
 def get_track(track_id: int, service: Tracks):
     return service.get(track_id)
 
 
-@router.patch("/{track_id}", response_model=TrackResponse,
-              responses=error_responses(404, 409, 422), summary="Update track details")
-def update_track(track_id: int, data: TrackUpdate, service: Tracks):
+@router.patch(
+    "/{track_id}",
+    response_model=TrackResponse,
+    responses=error_responses(401, 403, 404, 409, 422),
+    summary="Update track details (admin only)",
+)
+def update_track(track_id: int, data: TrackUpdate, _admin: AdminUser, service: Tracks):
     return service.update(track_id, data)
 
 
-@router.delete("/{track_id}", status_code=status.HTTP_204_NO_CONTENT,
-               responses=error_responses(404, 409), summary="Remove track from catalogue")
-def delete_track(track_id: int, service: Tracks, force: bool = False):
+@router.delete(
+    "/{track_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses=error_responses(401, 403, 404, 409),
+    summary="Remove track from catalogue (admin only)",
+)
+def delete_track(track_id: int, _admin: AdminUser, service: Tracks, force: bool = False):
     service.delete(track_id, force=force)

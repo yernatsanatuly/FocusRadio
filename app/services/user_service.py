@@ -8,14 +8,20 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.exceptions import ConflictError
+from app.core.security import hash_password
 from app.models import FocusSession, Room, Task, User, UserAchievement
-from app.models.enums import FINISHED_SESSION_STATUSES, LeaderboardMetric, SessionStatus, TaskStatus
+from app.models.enums import (
+    FINISHED_SESSION_STATUSES,
+    LeaderboardMetric,
+    SessionStatus,
+    TaskStatus,
+    UserRole,
+)
 from app.schemas.leaderboard import Leaderboard
 from app.schemas.users import AchievementResponse, UserCreate, UserResponse, UserStats, UserUpdate
 from app.services import gamification
 from app.services.common import (
-    ensure_actor_exists,
-    ensure_same_user,
+    ensure_owner_or_admin,
     find_active_session,
     get_room,
     get_user,
@@ -41,6 +47,7 @@ def to_response(user: User) -> UserResponse:
         username=user.username,
         display_name=user.display_name,
         email=user.email,
+        role=user.role,
         bio=user.bio,
         xp=user.xp,
         level=level,
@@ -159,16 +166,22 @@ class UserService:
     # --------------------------------------------------------------- commands
     def create(self, data: UserCreate) -> UserResponse:
         self._ensure_unique(username=data.username, email=data.email)
-        user = User(**data.model_dump())
+        user = User(
+            username=data.username,
+            display_name=data.display_name,
+            email=data.email,
+            hashed_password=hash_password(data.password),
+            role=data.role,
+            bio=data.bio,
+        )
         self.db.add(user)
         self.db.commit()
         self.db.refresh(user)
         return to_response(user)
 
-    def update(self, user_id: int, acting_user_id: int, data: UserUpdate) -> UserResponse:
-        ensure_actor_exists(self.db, acting_user_id)
+    def update(self, user_id: int, actor: User, data: UserUpdate) -> UserResponse:
         user = get_user(self.db, user_id)
-        ensure_same_user(acting_user_id, user.id, "profile")
+        ensure_owner_or_admin(actor, user.id, "profile")
 
         changes = data.model_dump(exclude_unset=True)
         if changes.get("display_name", "x") is None:
@@ -185,10 +198,25 @@ class UserService:
         self.db.refresh(user)
         return to_response(user)
 
-    def delete(self, user_id: int, acting_user_id: int) -> None:
-        ensure_actor_exists(self.db, acting_user_id)
+    def update_role(self, user_id: int, role: UserRole) -> UserResponse:
         user = get_user(self.db, user_id)
-        ensure_same_user(acting_user_id, user.id, "account")
+        if user.role == UserRole.ADMIN and role != UserRole.ADMIN:
+            admin_count = (
+                self.db.scalar(select(func.count(User.id)).where(User.role == UserRole.ADMIN)) or 0
+            )
+            if admin_count <= 1:
+                raise ConflictError(
+                    "Cannot demote the last administrator",
+                    code="LAST_ADMIN_REQUIRED",
+                )
+        user.role = role
+        self.db.commit()
+        self.db.refresh(user)
+        return to_response(user)
+
+    def delete(self, user_id: int, actor: User) -> None:
+        user = get_user(self.db, user_id)
+        ensure_owner_or_admin(actor, user.id, "account")
 
         room_service = RoomService(self.db)
         if user.current_room_id is not None:

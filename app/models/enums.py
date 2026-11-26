@@ -2,6 +2,11 @@
 from enum import Enum
 
 
+class UserRole(str, Enum):
+    USER = "user"
+    ADMIN = "admin"
+
+
 class SessionMode(str, Enum):
 
     POMODORO = "pomodoro"

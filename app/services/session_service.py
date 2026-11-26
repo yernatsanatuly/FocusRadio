@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core.exceptions import BusinessRuleError, ConflictError, ForbiddenError
-from app.models import FocusSession, RoomMember, Task, utcnow
+from app.models import FocusSession, RoomMember, Task, User, utcnow
 from app.models.enums import (
     ACTIVE_SESSION_STATUSES,
     SessionMode,
@@ -34,8 +34,7 @@ from app.schemas.sessions import (
 )
 from app.services import gamification
 from app.services.common import (
-    ensure_actor_exists,
-    ensure_same_user,
+    ensure_owner_or_admin,
     find_active_session,
     get_session,
     get_task,
@@ -103,6 +102,7 @@ class SessionService:
     def list(
         self,
         *,
+        actor: User,
         user_id: Optional[int],
         room_id: Optional[int],
         status: Optional[SessionStatus],
@@ -110,6 +110,15 @@ class SessionService:
         limit: int,
         offset: int,
     ) -> dict:
+        if not actor.is_admin:
+            if user_id is not None and user_id != actor.id:
+                raise ForbiddenError(
+                    "You can only view your own focus sessions",
+                    code="NOT_RESOURCE_OWNER",
+                    details={"owner_id": user_id, "acting_user_id": actor.id},
+                )
+            user_id = actor.id
+
         stmt = select(FocusSession)
         if user_id is not None:
             stmt = stmt.where(FocusSession.user_id == user_id)
@@ -129,11 +138,11 @@ class SessionService:
             "offset": offset,
         }
 
-    def get(self, session_id: int) -> SessionResponse:
-        return to_response(get_session(self.db, session_id))
+    def get(self, session_id: int, actor: User) -> SessionResponse:
+        return to_response(self._owned(session_id, actor))
 
-    def start(self, data: SessionCreate) -> SessionResponse:
-        user = get_user(self.db, data.user_id)
+    def start(self, actor: User, data: SessionCreate) -> SessionResponse:
+        user = actor
 
         active = find_active_session(self.db, user.id)
         if active:
@@ -167,8 +176,8 @@ class SessionService:
         self.db.refresh(session)
         return to_response(session)
 
-    def update(self, session_id: int, acting_user_id: int, data: SessionUpdate) -> SessionResponse:
-        session = self._owned(session_id, acting_user_id)
+    def update(self, session_id: int, actor: User, data: SessionUpdate) -> SessionResponse:
+        session = self._owned(session_id, actor)
         if "task_id" in data.model_fields_set:
             if session.status not in ACTIVE_SESSION_STATUSES:
                 raise ConflictError(
@@ -188,8 +197,8 @@ class SessionService:
         self.db.refresh(session)
         return to_response(session)
 
-    def pause(self, session_id: int, acting_user_id: int) -> SessionResponse:
-        session = self._owned(session_id, acting_user_id)
+    def pause(self, session_id: int, actor: User) -> SessionResponse:
+        session = self._owned(session_id, actor)
         self._require_status(session, SessionStatus.ACTIVE, "pause")
         if elapsed_focus_seconds(session) >= planned_seconds(session):
             raise ConflictError(
@@ -209,8 +218,8 @@ class SessionService:
         self.db.refresh(session)
         return to_response(session)
 
-    def resume(self, session_id: int, acting_user_id: int) -> SessionResponse:
-        session = self._owned(session_id, acting_user_id)
+    def resume(self, session_id: int, actor: User) -> SessionResponse:
+        session = self._owned(session_id, actor)
         self._require_status(session, SessionStatus.PAUSED, "resume")
         self._close_pause(session)
         session.status = SessionStatus.ACTIVE
@@ -218,8 +227,8 @@ class SessionService:
         self.db.refresh(session)
         return to_response(session)
 
-    def complete(self, session_id: int, acting_user_id: int, force: bool) -> SessionFinishResult:
-        session = self._owned(session_id, acting_user_id)
+    def complete(self, session_id: int, actor: User, force: bool) -> SessionFinishResult:
+        session = self._owned(session_id, actor)
         self._require_running(session, "complete")
 
         elapsed = elapsed_focus_seconds(session)
@@ -270,16 +279,16 @@ class SessionService:
             ),
         )
 
-    def cancel(self, session_id: int, acting_user_id: int) -> SessionResponse:
-        session = self._owned(session_id, acting_user_id)
+    def cancel(self, session_id: int, actor: User) -> SessionResponse:
+        session = self._owned(session_id, actor)
         self._require_running(session, "cancel")
         self.force_cancel(session)
         self.db.commit()
         self.db.refresh(session)
         return to_response(session)
 
-    def delete(self, session_id: int, acting_user_id: int) -> None:
-        session = self._owned(session_id, acting_user_id)
+    def delete(self, session_id: int, actor: User) -> None:
+        session = self._owned(session_id, actor)
         if session.status in ACTIVE_SESSION_STATUSES:
             raise ConflictError(
                 "A running session cannot be deleted; cancel or complete it first",
@@ -296,10 +305,9 @@ class SessionService:
         session.focused_seconds = int(elapsed)
         self.db.flush()
 
-    def _owned(self, session_id: int, acting_user_id: int) -> FocusSession:
-        ensure_actor_exists(self.db, acting_user_id)
+    def _owned(self, session_id: int, actor: User) -> FocusSession:
         session = get_session(self.db, session_id)
-        ensure_same_user(acting_user_id, session.user_id, "session")
+        ensure_owner_or_admin(actor, session.user_id, "session")
         return session
 
     @staticmethod

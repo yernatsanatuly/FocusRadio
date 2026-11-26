@@ -18,12 +18,33 @@ class AppError(Exception):
         *,
         code: Optional[str] = None,
         details: Optional[dict[str, Any]] = None,
+        headers: Optional[dict[str, str]] = None,
     ) -> None:
         super().__init__(message)
         self.message = message
         if code:
             self.code = code
         self.details = details or {}
+        self.headers = headers
+
+
+class UnauthorizedError(AppError):
+    status_code = status.HTTP_401_UNAUTHORIZED
+    code = "UNAUTHORIZED"
+
+    def __init__(
+        self,
+        message: str = "Authentication required",
+        *,
+        code: Optional[str] = None,
+        details: Optional[dict[str, Any]] = None,
+    ) -> None:
+        super().__init__(
+            message,
+            code=code or self.code,
+            details=details,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 class NotFoundError(AppError):
@@ -63,6 +84,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=exc.status_code,
             content=jsonable_encoder(_error_body(exc.code, exc.message, exc.details)),
+            headers=exc.headers,
         )
 
     @app.exception_handler(RequestValidationError)

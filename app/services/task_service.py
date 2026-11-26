@@ -6,14 +6,13 @@ from typing import Optional
 from sqlalchemy import case, func, select, update
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import BusinessRuleError, ConflictError
-from app.models import FocusSession, Task, utcnow
+from app.core.exceptions import BusinessRuleError, ConflictError, ForbiddenError
+from app.models import FocusSession, Task, User, utcnow
 from app.models.enums import ACTIVE_SESSION_STATUSES, TaskPriority, TaskStatus
 from app.schemas.tasks import TaskCreate, TaskResponse, TaskUpdate, TaskUpdateResult
 from app.services import gamification
 from app.services.common import (
-    ensure_actor_exists,
-    ensure_same_user,
+    ensure_owner_or_admin,
     get_task,
     get_user,
     paginate_query,
@@ -50,13 +49,22 @@ class TaskService:
     def list(
         self,
         *,
+        actor: User,
         user_id: Optional[int],
         status: Optional[TaskStatus],
         priority: Optional[TaskPriority],
         limit: int,
         offset: int,
     ) -> dict:
-        if user_id is not None:
+        if not actor.is_admin:
+            if user_id is not None and user_id != actor.id:
+                raise ForbiddenError(
+                    "You can only view your own tasks",
+                    code="NOT_RESOURCE_OWNER",
+                    details={"owner_id": user_id, "acting_user_id": actor.id},
+                )
+            user_id = actor.id
+        elif user_id is not None:
             get_user(self.db, user_id)
 
         stmt = select(Task)
@@ -83,15 +91,14 @@ class TaskService:
             "offset": offset,
         }
 
-    def get(self, task_id: int) -> TaskResponse:
-        return to_response(get_task(self.db, task_id))
+    def get(self, task_id: int, actor: User) -> TaskResponse:
+        return to_response(self._owned(task_id, actor))
 
-    def create(self, data: TaskCreate) -> TaskResponse:
-        user = get_user(self.db, data.user_id)
+    def create(self, actor: User, data: TaskCreate) -> TaskResponse:
         open_count = (
             self.db.scalar(
                 select(func.count(Task.id)).where(
-                    Task.user_id == user.id,
+                    Task.user_id == actor.id,
                     Task.status != TaskStatus.DONE,
                 )
             )
@@ -102,16 +109,16 @@ class TaskService:
                 f"A user can have at most {MAX_OPEN_TASKS} open tasks",
                 code="TOO_MANY_OPEN_TASKS",
             )
-        self._ensure_open_title_unique(user.id, data.title)
+        self._ensure_open_title_unique(actor.id, data.title)
 
-        task = Task(**data.model_dump())
+        task = Task(user_id=actor.id, **data.model_dump())
         self.db.add(task)
         self.db.commit()
         self.db.refresh(task)
         return to_response(task)
 
-    def update(self, task_id: int, acting_user_id: int, data: TaskUpdate) -> TaskUpdateResult:
-        task = self._owned(task_id, acting_user_id)
+    def update(self, task_id: int, actor: User, data: TaskUpdate) -> TaskUpdateResult:
+        task = self._owned(task_id, actor)
         changes = data.model_dump(exclude_unset=True)
         new_status = changes.pop("status", None)
 
@@ -158,8 +165,8 @@ class TaskService:
         self.db.refresh(task)
         return TaskUpdateResult(task=to_response(task), new_achievements=new_achievements)
 
-    def delete(self, task_id: int, acting_user_id: int) -> None:
-        task = self._owned(task_id, acting_user_id)
+    def delete(self, task_id: int, actor: User) -> None:
+        task = self._owned(task_id, actor)
         active_session_id = self.db.scalar(
             select(FocusSession.id).where(
                 FocusSession.task_id == task.id,
@@ -178,10 +185,9 @@ class TaskService:
         self.db.delete(task)
         self.db.commit()
 
-    def _owned(self, task_id: int, acting_user_id: int) -> Task:
-        ensure_actor_exists(self.db, acting_user_id)
+    def _owned(self, task_id: int, actor: User) -> Task:
         task = get_task(self.db, task_id)
-        ensure_same_user(acting_user_id, task.user_id, "task")
+        ensure_owner_or_admin(actor, task.user_id, "task")
         return task
 
     def _ensure_open_title_unique(

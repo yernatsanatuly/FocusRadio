@@ -28,6 +28,7 @@ class MessageResponse(BaseModel):
 def error_responses(*codes: int) -> dict[int | str, dict[str, Any]]:
     descriptions = {
         400: "Bad request",
+        401: "Authentication required or invalid credentials",
         403: "Action not allowed for this user",
         404: "Resource not found",
         409: "Conflict with the current state of a resource",

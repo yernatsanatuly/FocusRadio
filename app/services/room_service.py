@@ -8,7 +8,7 @@ from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.exceptions import BusinessRuleError, ConflictError, ForbiddenError, NotFoundError
-from app.models import FocusSession, Room, RoomMember, Track
+from app.models import FocusSession, Room, RoomMember, Track, User
 from app.models.enums import ACTIVE_SESSION_STATUSES, Genre, LeaderboardMetric, Mood, SessionStatus
 from app.schemas.leaderboard import Leaderboard
 from app.schemas.rooms import (
@@ -23,11 +23,9 @@ from app.schemas.rooms import (
 from app.schemas.tracks import TrackResponse
 from app.services import gamification
 from app.services.common import (
-    ensure_actor_exists,
     find_active_session,
     get_room,
     get_track,
-    get_user,
     paginate_query,
 )
 from app.services.session_service import remaining_seconds
@@ -216,8 +214,8 @@ class RoomService:
         )
 
     # --------------------------------------------------------------- commands
-    def create(self, data: RoomCreate) -> RoomResponse:
-        owner = get_user(self.db, data.owner_id)
+    def create(self, actor: User, data: RoomCreate) -> RoomResponse:
+        owner = actor
         self._ensure_name_free(data.name)
         if owner.current_room_id is not None:
             raise ConflictError(
@@ -242,8 +240,8 @@ class RoomService:
         self.db.commit()
         return self.to_response(get_room(self.db, room.id, load_relations=True))
 
-    def update(self, room_id: int, acting_user_id: int, data: RoomUpdate) -> RoomResponse:
-        room = self._owned(room_id, acting_user_id)
+    def update(self, room_id: int, actor: User, data: RoomUpdate) -> RoomResponse:
+        room = self._owned(room_id, actor)
         fields = data.model_fields_set
 
         if "name" in fields and data.name.lower() != room.name.lower():
@@ -275,14 +273,14 @@ class RoomService:
         self.db.commit()
         return self.to_response(get_room(self.db, room.id, load_relations=True))
 
-    def delete(self, room_id: int, acting_user_id: int) -> None:
-        room = self._owned(room_id, acting_user_id)
+    def delete(self, room_id: int, actor: User) -> None:
+        room = self._owned(room_id, actor)
         self.close_room(room)
         self.db.commit()
 
-    def join(self, room_id: int, data: JoinRoomRequest) -> RoomResponse:
+    def join(self, room_id: int, actor: User, data: JoinRoomRequest) -> RoomResponse:
         room = get_room(self.db, room_id, load_relations=True)
-        user = get_user(self.db, data.user_id)
+        user = actor
         member_ids = {m.user_id for m in room.members}
         if user.id in member_ids:
             raise ConflictError("User is already a member of this room", code="ALREADY_MEMBER")
@@ -310,24 +308,23 @@ class RoomService:
         self.db.commit()
         return self.to_response(get_room(self.db, room.id, load_relations=True))
 
-    def remove_member(self, room_id: int, user_id: int, acting_user_id: int) -> dict:
-        """Leave (acting user == member) or kick (acting user == owner)."""
-        ensure_actor_exists(self.db, acting_user_id)
+    def remove_member(self, room_id: int, user_id: int, actor: User) -> dict:
+        """Leave (self) or kick (room owner or admin)."""
         room = get_room(self.db, room_id, load_relations=True)
         if not any(m.user_id == user_id for m in room.members):
             raise NotFoundError("Member", user_id)
-        if acting_user_id != user_id and acting_user_id != room.owner_id:
+        if actor.id != user_id and actor.id != room.owner_id and not actor.is_admin:
             raise ForbiddenError(
-                "Only the room owner can remove other members", code="NOT_ROOM_OWNER"
+                "Only the room owner or an administrator can remove other members",
+                code="NOT_ROOM_OWNER",
             )
-        result = self.detach_member(room, user_id, kicked=acting_user_id != user_id)
+        result = self.detach_member(room, user_id, kicked=actor.id != user_id)
         self.db.commit()
         return result
 
-    def set_track(self, room_id: int, acting_user_id: int, track_id: int) -> RoomResponse:
-        ensure_actor_exists(self.db, acting_user_id)
+    def set_track(self, room_id: int, actor: User, track_id: int) -> RoomResponse:
         room = get_room(self.db, room_id, load_relations=True)
-        if not any(m.user_id == acting_user_id for m in room.members):
+        if not any(m.user_id == actor.id for m in room.members):
             raise ForbiddenError("Only room members can change the music", code="NOT_A_MEMBER")
         track = get_track(self.db, track_id)
         if room.current_track_id == track.id:
@@ -336,10 +333,9 @@ class RoomService:
         self.db.commit()
         return self.to_response(get_room(self.db, room.id, load_relations=True))
 
-    def stop_track(self, room_id: int, acting_user_id: int) -> RoomResponse:
-        ensure_actor_exists(self.db, acting_user_id)
+    def stop_track(self, room_id: int, actor: User) -> RoomResponse:
         room = get_room(self.db, room_id, load_relations=True)
-        if not any(m.user_id == acting_user_id for m in room.members):
+        if not any(m.user_id == actor.id for m in room.members):
             raise ForbiddenError("Only room members can change the music", code="NOT_A_MEMBER")
         if room.current_track_id is None:
             raise ConflictError("Nothing is playing in this room", code="NO_TRACK_PLAYING")
@@ -390,12 +386,11 @@ class RoomService:
         self.db.delete(room)
         self.db.flush()
 
-    def _owned(self, room_id: int, acting_user_id: int) -> Room:
-        ensure_actor_exists(self.db, acting_user_id)
+    def _owned(self, room_id: int, actor: User) -> Room:
         room = get_room(self.db, room_id, load_relations=True)
-        if room.owner_id != acting_user_id:
+        if room.owner_id != actor.id and not actor.is_admin:
             raise ForbiddenError(
-                "Only the room owner can perform this action",
+                "Only the room owner or an administrator can perform this action",
                 code="NOT_ROOM_OWNER",
                 details={"owner_id": room.owner_id},
             )

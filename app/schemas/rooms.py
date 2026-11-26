@@ -26,7 +26,6 @@ class RoomCreate(BaseModel):
         json_schema_extra={"example": {
             "name": "Night Owls Coding",
             "description": "Late-night deep work for developers",
-            "owner_id": 2,
             "capacity": 5,
             "is_private": True,
             "access_code": "owl2026",
@@ -37,7 +36,6 @@ class RoomCreate(BaseModel):
 
     name: str = Field(min_length=3, max_length=60)
     description: Optional[str] = Field(default=None, max_length=300)
-    owner_id: int = Field(ge=1)
     capacity: int = Field(default=8, ge=2, le=50)
     is_private: bool = False
     access_code: Optional[str] = Field(default=None, pattern=ACCESS_CODE_PATTERN,
@@ -103,9 +101,8 @@ class RoomResponse(BaseModel):
 
 
 class JoinRoomRequest(BaseModel):
-    model_config = ConfigDict(json_schema_extra={"example": {"user_id": 2, "access_code": None}})
+    model_config = ConfigDict(json_schema_extra={"example": {"access_code": None}})
 
-    user_id: int = Field(ge=1)
     access_code: Optional[str] = Field(default=None, max_length=12)
 
 
